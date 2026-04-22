@@ -1,0 +1,47 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.codex
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Frontend
+frontend/**/node_modules/
+frontend/**/dist/
+frontend/**/.vite/
+frontend/**/coverage/
+
+# Python (backend & ai-service)
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.venv/
+**/.uv-cache/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/coverage.xml
+**/htmlcov/
+**/*.egg-info/
+**/build/
+**/dist/
+
+# AI models
+ai-service/models/*.bin
+ai-service/models/*.pt
+ai-service/models/*.onnx
+ai-service/models/*.safetensors
+
+# Deploy
+deploy/env/*.local

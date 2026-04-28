@@ -79,6 +79,7 @@
 | lost_location | varchar(255) | 丢失地点 |
 | subscribe_match | tinyint | 是否订阅匹配 |
 | status | varchar(20) | 见 `enums.md` LostItemStatus |
+| review_status | varchar(20) | 见 `enums.md` ReviewStatus；失物内容审核状态 |
 | ai_tags | varchar(255) | AI 生成标签，逗号分隔或 JSON |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
@@ -87,6 +88,7 @@
 
 - `idx_lost_items_user_id(user_id)`
 - `idx_lost_items_category_status(category, status)`
+- `idx_lost_items_review_status(review_status)`
 - `idx_lost_items_location(lost_location)`
 
 ### 3.4 `found_items` 招领表
@@ -104,9 +106,17 @@
 | custody_type | varchar(30) | 见 `enums.md` CustodyType |
 | contact_preference | varchar(30) | 见 `enums.md` ContactPreference |
 | status | varchar(20) | 见 `enums.md` FoundItemStatus |
+| review_status | varchar(20) | 见 `enums.md` ReviewStatus；招领内容审核状态 |
 | ai_tags | varchar(255) | AI 标签 |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
+
+索引建议：
+
+- `idx_found_items_user_id(user_id)`
+- `idx_found_items_category_status(category, status)`
+- `idx_found_items_review_status(review_status)`
+- `idx_found_items_location(found_location)`
 
 ### 3.5 `item_images` 物品图片表
 

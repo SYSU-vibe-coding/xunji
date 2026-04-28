@@ -22,7 +22,7 @@
 ### UserStatus（`users.status`）
 `ACTIVE` / `DISABLED` / `CANCELLED`
 
-### ReviewStatus（认证申请 / 内容审核通用）
+### ReviewStatus（认证申请 / 失物招领内容审核通用）
 `PENDING` / `APPROVED` / `REJECTED`
 
 ## 物品

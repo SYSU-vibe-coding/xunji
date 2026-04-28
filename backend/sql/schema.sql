@@ -65,12 +65,14 @@ CREATE TABLE `lost_items` (
   `lost_location`   VARCHAR(255) NOT NULL,
   `subscribe_match` TINYINT      NOT NULL DEFAULT 0,
   `status`          VARCHAR(20)  NOT NULL DEFAULT 'SEARCHING' COMMENT 'SEARCHING / FOUND / CLOSED',
+  `review_status`   VARCHAR(20)  NOT NULL DEFAULT 'APPROVED' COMMENT 'PENDING / APPROVED / REJECTED',
   `ai_tags`         VARCHAR(255) DEFAULT NULL,
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_lost_items_user_id` (`user_id`),
   KEY `idx_lost_items_category_status` (`category`, `status`),
+  KEY `idx_lost_items_review_status` (`review_status`),
   KEY `idx_lost_items_location` (`lost_location`(100))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='失物表';
 
@@ -90,12 +92,14 @@ CREATE TABLE `found_items` (
   `custody_type`       VARCHAR(30)  NOT NULL COMMENT 'SELF / SECURITY / OFFICE',
   `contact_preference` VARCHAR(30)  NOT NULL COMMENT 'IN_APP / PHONE',
   `status`             VARCHAR(20)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / CLAIMING / RETURNED / CLOSED',
+  `review_status`      VARCHAR(20)  NOT NULL DEFAULT 'APPROVED' COMMENT 'PENDING / APPROVED / REJECTED',
   `ai_tags`            VARCHAR(255) DEFAULT NULL,
   `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_found_items_user_id` (`user_id`),
   KEY `idx_found_items_category_status` (`category`, `status`),
+  KEY `idx_found_items_review_status` (`review_status`),
   KEY `idx_found_items_location` (`found_location`(100))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='招领表';
 

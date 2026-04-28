@@ -1,4 +1,6 @@
+from app.user.models import User
 from httpx import AsyncClient
+from sqlalchemy import select
 
 
 class TestAuthRoutes:
@@ -104,3 +106,50 @@ class TestUserProfileRoutes:
 
         get_resp = await client.get("/api/v1/users/me/certification", headers=headers)
         assert get_resp.json()["data"]["campusId"] == "S20260001"
+
+    async def test_cancelled_user_old_token_rejected(self, client: AsyncClient):
+        code_resp = await client.post(
+            "/api/v1/auth/sms-code",
+            json={"phone": "13800000006"},
+        )
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "loginType": "PHONE_CODE",
+                "phone": "13800000006",
+                "code": code_resp.json()["data"]["debugCode"],
+            },
+        )
+        token = login_resp.json()["data"]["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        cancel_resp = await client.post("/api/v1/users/me/cancel", headers=headers)
+        assert cancel_resp.json()["code"] == 0
+
+        resp = await client.get("/api/v1/users/me", headers=headers)
+        assert resp.json()["code"] == 41005
+
+    async def test_disabled_user_old_token_rejected(self, client: AsyncClient, session):
+        code_resp = await client.post(
+            "/api/v1/auth/sms-code",
+            json={"phone": "13800000007"},
+        )
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "loginType": "PHONE_CODE",
+                "phone": "13800000007",
+                "code": code_resp.json()["data"]["debugCode"],
+            },
+        )
+        user_id = login_resp.json()["data"]["user"]["id"]
+        token = login_resp.json()["data"]["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one()
+        user.status = "DISABLED"
+        await session.commit()
+
+        resp = await client.get("/api/v1/users/me", headers=headers)
+        assert resp.json()["code"] == 41005

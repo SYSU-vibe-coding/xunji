@@ -1,7 +1,9 @@
 import pytest
 from app.common.errors import BizError, ErrorCode
+from app.operation_log.models import OperationLog
 from app.user.schemas import CertificationRequest, CurrentUser, LoginRequest, SmsCodeRequest
 from app.user.service import UserService
+from sqlalchemy import select
 
 
 class TestUserServiceLogin:
@@ -71,3 +73,32 @@ class TestUserServiceCertification:
             ),
         )
         assert cert.review_status == "PENDING"
+
+        result = await session.execute(
+            select(OperationLog).where(
+                OperationLog.biz_type == "CERT",
+                OperationLog.biz_id == cert.id,
+                OperationLog.action == "CREATE",
+            )
+        )
+        assert result.scalar_one_or_none() is not None
+
+    async def test_cancel_account_writes_operation_log(self, session):
+        svc = UserService(session)
+        sms = await svc.send_sms_code(SmsCodeRequest(phone="13800004322"))
+        login_resp = await svc.login(
+            LoginRequest(loginType="PHONE_CODE", phone="13800004322", code=sms.debug_code)
+        )
+
+        current = CurrentUser(id=login_resp.user.id, role="USER", status="ACTIVE")
+        resp = await svc.cancel_account(current)
+        assert resp["status"] == "CANCELLED"
+
+        result = await session.execute(
+            select(OperationLog).where(
+                OperationLog.biz_type == "USER",
+                OperationLog.biz_id == login_resp.user.id,
+                OperationLog.action == "UPDATE_STATUS",
+            )
+        )
+        assert result.scalar_one_or_none() is not None

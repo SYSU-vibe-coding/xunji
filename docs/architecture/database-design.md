@@ -156,12 +156,14 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | id | char(26) | 主键 |
-| match_id | char(26) | 来源匹配记录 |
+| match_id | char(26) | 来源匹配记录，可空 |
 | found_item_id | char(26) | 招领物品 |
 | claimant_id | char(26) | 认领人 |
 | verify_level | varchar(20) | 见 `enums.md` VerifyLevel |
 | review_status | varchar(20) | 见 `enums.md` ClaimReviewStatus |
 | reject_reason | varchar(255) | 拒绝原因 |
+| proof_text | varchar(500) | 认领者补充凭证说明 |
+| appeal_reason | varchar(500) | 申诉理由 |
 | claimed_at | datetime | 发起时间 |
 | updated_at | datetime | 更新时间 |
 
@@ -172,6 +174,7 @@
 | id | char(26) | 主键 |
 | claim_id | char(26) | 认领请求 |
 | question_id | char(26) | 验证问题 |
+| question_text | varchar(255) | 验证问题文本快照 |
 | answer_text | varchar(255) | 用户回答 |
 | match_score | decimal(5,2) | 回答匹配度 |
 | created_at | datetime | 创建时间 |
@@ -215,6 +218,7 @@
 | is_read | tinyint | 是否已读 |
 | related_type | varchar(30) | 关联业务类型 |
 | related_id | char(26) | 关联业务 ID |
+| priority | varchar(20) | 见 `enums.md` NotificationPriority |
 | created_at | datetime | 创建时间 |
 
 ### 3.13 `reports` 举报表

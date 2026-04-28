@@ -90,6 +90,66 @@ class UserService:
         if now > expires_at or code != expected:
             raise BizError(ErrorCode.SMS_CODE_INVALID)
 
+    # ---- Internal helpers ----
+
+    async def get_user_internal(self, user_id: str) -> User | None:
+        return await self._repo.get_by_id(user_id)
+
+    async def update_credit_score_internal(self, user_id: str, delta_score: int) -> int:
+        user = await self._repo.get_by_id(user_id)
+        if user is None:
+            raise BizError(ErrorCode.NOT_FOUND)
+        user.credit_score = max(0, min(999, user.credit_score + delta_score))
+        await self._repo.update(user)
+        return user.credit_score
+
+    async def list_certifications_internal(
+        self, review_status: str | None, offset: int, limit: int
+    ) -> tuple[list[UserCertRequest], int]:
+        return await self._cert_repo.list_with_filter(
+            review_status=review_status, offset=offset, limit=limit
+        )
+
+    async def review_certification_internal(
+        self, cert_id: str, action: str, comment: str | None, reviewer_id: str
+    ) -> tuple[UserCertRequest, User]:
+        cert_request = await self._cert_repo.get_by_id(cert_id)
+        if cert_request is None:
+            raise BizError(ErrorCode.NOT_FOUND)
+        user = await self._repo.get_by_id(cert_request.user_id)
+        if user is None:
+            raise BizError(ErrorCode.NOT_FOUND)
+        review_status = "APPROVED" if action == "APPROVE" else "REJECTED"
+        cert_request.review_status = review_status
+        cert_request.review_comment = comment
+        cert_request.reviewer_id = reviewer_id
+        cert_request.reviewed_at = datetime.now(UTC).replace(tzinfo=None)
+        user.cert_status = review_status
+        await self._cert_repo.update(cert_request)
+        await self._repo.update(user)
+        return cert_request, user
+
+    async def list_users_internal(
+        self,
+        *,
+        role: str | None,
+        status: str | None,
+        keyword: str | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[User], int]:
+        return await self._repo.list_with_filter(
+            role=role, status=status, keyword=keyword, offset=offset, limit=limit
+        )
+
+    async def change_user_status_internal(self, user_id: str, status: str) -> User:
+        user = await self._repo.get_by_id(user_id)
+        if user is None:
+            raise BizError(ErrorCode.NOT_FOUND)
+        user.status = status
+        await self._repo.update(user)
+        return user
+
     # ---- Profile ----
 
     async def get_profile(self, current_user: CurrentUser) -> UserProfileResponse:

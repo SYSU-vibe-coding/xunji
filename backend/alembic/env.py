@@ -2,11 +2,16 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from app.core.config import settings
-from app.db.base import Base
 
 # Import ALL models here so Alembic sees them for autogenerate
+from app.admin.models import Announcement, Report  # noqa: F401
+from app.claim.models import ClaimAnswer, ClaimRequest, HandoverRecord  # noqa: F401
+from app.core.config import settings
+from app.credit.models import CreditLog  # noqa: F401
+from app.db.base import Base
 from app.item.models import FoundItem, ItemImage, LostItem, VerifyQuestion  # noqa: F401
+from app.match.models import MatchResult  # noqa: F401
+from app.notification.models import Notification  # noqa: F401
 from app.operation_log.models import OperationLog  # noqa: F401
 from app.user.models import User, UserCertRequest  # noqa: F401
 from sqlalchemy.ext.asyncio import create_async_engine

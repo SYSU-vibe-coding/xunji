@@ -303,10 +303,4 @@ CREATE TABLE `operation_logs` (
   KEY `idx_oplog_biz` (`biz_type`, `biz_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志表';
 
--- -----------------------------------------------------------
--- 初始管理员账号 (演示用)
--- -----------------------------------------------------------
-INSERT INTO `users` (`id`, `phone`, `nickname`, `role`, `cert_status`, `credit_score`, `status`)
-VALUES ('01ADMIN00000000000000001', '13800000000', '管理员', 'ADMIN', 'APPROVED', 100, 'ACTIVE');
-
 SET FOREIGN_KEY_CHECKS = 1;

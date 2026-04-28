@@ -87,14 +87,18 @@ export interface LostItemSummary {
   userId: string;
   itemName: string;
   category: ItemCategory;
-  description: string;
+  description: string | null;
   lostTimeStart: string;
   lostTimeEnd: string;
   lostLocation: string;
   status: LostItemStatus;
+  reviewStatus: ReviewStatus;
   coverImageUrl: string | null;
   createdAt: string;
   matchCount?: number;
+  subscribeMatch?: boolean;
+  imageUrls?: string[];
+  updatedAt?: string;
 }
 
 export interface FoundItemSummary {
@@ -102,10 +106,11 @@ export interface FoundItemSummary {
   userId: string;
   itemName: string;
   category: ItemCategory;
-  description: string;
+  description: string | null;
   foundTime: string;
   foundLocation: string;
   status: FoundItemStatus;
+  reviewStatus: ReviewStatus;
   coverImageUrl: string | null;
   isSensitive: boolean;
   custodyType: CustodyType;
@@ -188,6 +193,7 @@ export interface ItemReviewRecord {
   location: string;
   ownerNickname: string;
   status: LostItemStatus | FoundItemStatus;
+  reviewStatus: ReviewStatus;
   isSensitive: boolean;
   reportCount: number;
   createdAt: string;
@@ -331,6 +337,7 @@ export const demoLostItems: LostItemSummary[] = [
     lostTimeEnd: '2026-04-27 19:10:00',
     lostLocation: '图书馆二楼东侧自习区',
     status: 'SEARCHING',
+    reviewStatus: 'APPROVED',
     coverImageUrl: 'https://images.unsplash.com/photo-1603351154351-5e2d0600bb77?auto=format&fit=crop&w=640&q=80',
     createdAt: '2026-04-27 19:25:00',
     matchCount: 3,
@@ -345,6 +352,7 @@ export const demoLostItems: LostItemSummary[] = [
     lostTimeEnd: '2026-04-26 15:00:00',
     lostLocation: '第一教学楼 A308',
     status: 'FOUND',
+    reviewStatus: 'APPROVED',
     coverImageUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=640&q=80',
     createdAt: '2026-04-26 16:10:00',
     matchCount: 1,
@@ -361,6 +369,7 @@ export const demoFoundItems: FoundItemSummary[] = [
     foundTime: '2026-04-27 18:55:00',
     foundLocation: '图书馆二楼东侧',
     status: 'PENDING',
+    reviewStatus: 'APPROVED',
     coverImageUrl: 'https://images.unsplash.com/photo-1606741965429-8d76ff50bb2f?auto=format&fit=crop&w=640&q=80',
     isSensitive: false,
     custodyType: 'SELF',
@@ -377,6 +386,7 @@ export const demoFoundItems: FoundItemSummary[] = [
     foundTime: '2026-04-28 08:15:00',
     foundLocation: '南区食堂二楼',
     status: 'CLAIMING',
+    reviewStatus: 'APPROVED',
     coverImageUrl: null,
     isSensitive: true,
     custodyType: 'SECURITY',
@@ -393,6 +403,7 @@ export const demoFoundItems: FoundItemSummary[] = [
     foundTime: '2026-04-28 10:40:00',
     foundLocation: '第一教学楼 A 座大厅',
     status: 'PENDING',
+    reviewStatus: 'APPROVED',
     coverImageUrl: 'https://images.unsplash.com/photo-1531346878377-a5be20888e57?auto=format&fit=crop&w=640&q=80',
     isSensitive: false,
     custodyType: 'OFFICE',
@@ -409,6 +420,7 @@ export const demoFoundItems: FoundItemSummary[] = [
     foundTime: '2026-04-27 20:10:00',
     foundLocation: '体育馆西门',
     status: 'RETURNED',
+    reviewStatus: 'APPROVED',
     coverImageUrl: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&w=640&q=80',
     isSensitive: false,
     custodyType: 'SELF',
@@ -563,6 +575,7 @@ export const demoItemReviews: ItemReviewRecord[] = [
     location: demoFoundItems[1].foundLocation,
     ownerNickname: '陈同学',
     status: demoFoundItems[1].status,
+    reviewStatus: demoFoundItems[1].reviewStatus,
     isSensitive: true,
     reportCount: 0,
     createdAt: demoFoundItems[1].createdAt,
@@ -575,6 +588,7 @@ export const demoItemReviews: ItemReviewRecord[] = [
     location: demoLostItems[0].lostLocation,
     ownerNickname: demoUser.nickname,
     status: demoLostItems[0].status,
+    reviewStatus: demoLostItems[0].reviewStatus,
     isSensitive: false,
     reportCount: 1,
     createdAt: demoLostItems[0].createdAt,

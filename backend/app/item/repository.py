@@ -67,6 +67,10 @@ class LostItemRepository:
         await self._session.flush()
         return item
 
+    async def delete(self, item: LostItem) -> None:
+        await self._session.delete(item)
+        await self._session.flush()
+
     async def check_duplicate(
         self, user_id: str, item_name: str, lost_time_start: str, lost_location: str
     ) -> bool:
@@ -197,6 +201,12 @@ class ItemImageRepository:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def delete_by_biz(self, biz_type: str, biz_id: str) -> None:
+        images = await self.get_by_biz(biz_type, biz_id)
+        for image in images:
+            await self._session.delete(image)
+        await self._session.flush()
 
 
 class VerifyQuestionRepository:

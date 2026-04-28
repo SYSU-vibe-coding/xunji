@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from app.core.bootstrap import ensure_default_admin
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 
@@ -12,6 +13,7 @@ from app.core.exceptions import register_exception_handlers
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    await ensure_default_admin()
     yield
     logger.info("Shutting down...")
 

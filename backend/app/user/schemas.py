@@ -72,7 +72,6 @@ class UserProfileResponse(BaseModel):
 class UpdateProfileRequest(BaseModel):
     nickname: str | None = Field(None, min_length=2, max_length=20)
     avatar_url: str | None = Field(None, alias="avatarUrl")
-    contact_phone: str | None = Field(None, pattern=r"^\d{11}$", alias="contactPhone")
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 

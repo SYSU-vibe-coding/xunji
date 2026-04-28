@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_DAYS: int = 7
 
+    # Bootstrap admin account for local/first deployment.
+    ADMIN_ACCOUNT: str = "admin"
+    ADMIN_PASSWORD: str = "admin123456"
+    ADMIN_PHONE: str = "19900000000"
+
     # MinIO / Object Storage
     MINIO_ENDPOINT: str = "127.0.0.1:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"

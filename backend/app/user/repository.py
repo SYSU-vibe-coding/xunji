@@ -16,6 +16,12 @@ class UserRepository:
         result = await self._session.execute(select(User).where(User.phone == phone))
         return result.scalar_one_or_none()
 
+    async def get_by_account(self, account: str) -> User | None:
+        result = await self._session.execute(
+            select(User).where(or_(User.phone == account, User.nickname == account)).limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def create(self, user: User) -> User:
         self._session.add(user)
         await self._session.flush()

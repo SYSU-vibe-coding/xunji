@@ -7,7 +7,6 @@ import type {
   LoginResponse,
   PageData,
   ReportRecord,
-  SmsCodeResponse,
 } from '@xunji/shared';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
@@ -67,18 +66,10 @@ export const adminApiRoutes = {
   users: '/admin/users',
 } as const;
 
-export function sendAdminSmsCode(phone: string): Promise<SmsCodeResponse> {
-  return adminRequestJson<SmsCodeResponse>('/auth/sms-code', {
-    method: 'POST',
-    body: JSON.stringify({ phone }),
-    skipAuth: true,
-  });
-}
-
-export async function loginAdminWithPhoneCode(phone: string, code: string): Promise<LoginResponse> {
+export async function loginAdminWithPassword(account: string, password: string): Promise<LoginResponse> {
   const data = await adminRequestJson<LoginResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ loginType: 'PHONE_CODE', phone, code }),
+    body: JSON.stringify({ loginType: 'PASSWORD', account, password }),
     skipAuth: true,
   });
   setStoredAdminToken(data.token);
@@ -109,6 +100,47 @@ export function listAdminUsers(keyword = ''): Promise<PageData<AdminUserRecord>>
 
 export function createAnnouncement(payload: unknown): Promise<{ id: string; status: string }> {
   return adminRequestJson<{ id: string; status: string }>(adminApiRoutes.announcements, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reviewCertification(
+  id: string,
+  payload: { action: 'APPROVE' | 'REJECT'; comment?: string },
+): Promise<{ id: string; reviewStatus: string }> {
+  return adminRequestJson<{ id: string; reviewStatus: string }>(`${adminApiRoutes.certifications}/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reviewItem(
+  bizType: 'LOST' | 'FOUND',
+  id: string,
+  payload: { action: 'APPROVE' | 'REJECT'; comment?: string },
+): Promise<{ id: string; status: string; reviewStatus: string }> {
+  return adminRequestJson<{ id: string; status: string; reviewStatus: string }>(`/admin/items/${bizType}/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function handleAdminReport(
+  id: string,
+  payload: { action: 'VALID' | 'INVALID'; result?: string; creditDelta?: number; reasonCode?: string },
+): Promise<{ id: string; handleStatus: string }> {
+  return adminRequestJson<{ id: string; handleStatus: string }>(`${adminApiRoutes.reports}/${id}/handle`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function changeAdminUserStatus(
+  id: string,
+  payload: { status: 'ACTIVE' | 'DISABLED' | 'CANCELLED'; reason?: string },
+): Promise<{ id: string; status: string }> {
+  return adminRequestJson<{ id: string; status: string }>(`${adminApiRoutes.users}/${id}/status`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

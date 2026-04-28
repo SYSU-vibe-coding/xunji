@@ -36,6 +36,7 @@ from app.item.schemas import (
     LostItemDetail,
     LostItemListItem,
     LostItemQuery,
+    UpdateLostItemRequest,
     VerifyQuestionOutput,
 )
 from app.operation_log.service import OperationLogService
@@ -88,6 +89,7 @@ class ItemService:
             lost_location=req.lost_location,
             subscribe_match=1 if req.subscribe_match else 0,
             status="SEARCHING",
+            review_status="APPROVED",
         )
 
         await self._lost_repo.create(lost_item)
@@ -145,6 +147,7 @@ class ItemService:
                     lost_time_end=format_beijing(item.lost_time_end),
                     lost_location=item.lost_location,
                     status=item.status,
+                    review_status=item.review_status,
                     cover_image_url=cover,
                     created_at=format_beijing(item.created_at),
                 ).model_dump(by_alias=True)
@@ -160,6 +163,7 @@ class ItemService:
 
         images = await self._image_repo.get_by_biz("LOST", item_id)
         image_urls = [img.image_url for img in images]
+        cover = image_urls[0] if image_urls else None
 
         match_count = None
         if item.user_id == current_user.id:
@@ -176,12 +180,87 @@ class ItemService:
             lost_location=item.lost_location,
             subscribe_match=bool(item.subscribe_match),
             status=item.status,
+            review_status=item.review_status,
+            cover_image_url=cover,
             image_urls=image_urls,
             match_count=match_count,
             created_at=format_beijing(item.created_at),
             updated_at=format_beijing(item.updated_at),
         )
         return detail.model_dump(by_alias=True)
+
+    async def update_lost_item(
+        self, item_id: str, req: UpdateLostItemRequest, current_user: CurrentUser
+    ) -> dict[str, str]:
+        item = await self._lost_repo.get_by_id(item_id)
+        if item is None:
+            raise BizError(ErrorCode.ITEM_NOT_FOUND)
+        if item.user_id != current_user.id:
+            raise BizError(ErrorCode.NOT_PUBLISHER)
+        if item.status == "FOUND":
+            raise BizError(ErrorCode.INVALID_STATE)
+
+        if len(req.image_urls) > 5:
+            raise BizError(ErrorCode.IMAGE_EXCEED)
+
+        item.item_name = req.item_name
+        item.category = req.category
+        item.description = req.description
+        item.lost_time_start = datetime.strptime(req.lost_time_start, "%Y-%m-%d %H:%M:%S")
+        item.lost_time_end = datetime.strptime(req.lost_time_end, "%Y-%m-%d %H:%M:%S")
+        item.lost_location = req.lost_location
+        item.subscribe_match = 1 if req.subscribe_match else 0
+        if item.status == "CLOSED":
+            item.status = "SEARCHING"
+        item.review_status = "PENDING"
+
+        await self._lost_repo.update(item)
+        await self._image_repo.delete_by_biz("LOST", item_id)
+        if req.image_urls:
+            images = [
+                ItemImage(
+                    id=generate_ulid(),
+                    biz_type="LOST",
+                    biz_id=item_id,
+                    image_url=url,
+                    sort_order=idx,
+                )
+                for idx, url in enumerate(req.image_urls)
+            ]
+            await self._image_repo.create_batch(images)
+
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="LOST",
+            biz_id=item_id,
+            action="UPDATE",
+            detail=f"修改失物: {req.item_name}",
+        )
+        await self._session.commit()
+        return {"id": item_id, "status": item.status, "reviewStatus": item.review_status}
+
+    async def delete_lost_item(self, item_id: str, current_user: CurrentUser) -> dict[str, str]:
+        item = await self._lost_repo.get_by_id(item_id)
+        if item is None:
+            raise BizError(ErrorCode.ITEM_NOT_FOUND)
+        if item.user_id != current_user.id:
+            raise BizError(ErrorCode.NOT_PUBLISHER)
+        if item.status == "FOUND":
+            raise BizError(ErrorCode.INVALID_STATE)
+
+        await self._image_repo.delete_by_biz("LOST", item_id)
+        await self._lost_repo.delete(item)
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="LOST",
+            biz_id=item_id,
+            action="DELETE",
+            detail=f"删除失物: {item.item_name}",
+        )
+        await self._session.commit()
+        return {"id": item_id, "status": "DELETED"}
 
     async def change_lost_item_status(
         self, item_id: str, req: ChangeStatusRequest, current_user: CurrentUser
@@ -244,6 +323,7 @@ class ItemService:
             custody_type=req.custody_type,
             contact_preference=req.contact_preference,
             status="PENDING",
+            review_status="APPROVED",
         )
 
         await self._found_repo.create(found_item)
@@ -351,6 +431,7 @@ class ItemService:
                     custody_type=item.custody_type,
                     contact_preference=item.contact_preference,
                     status=item.status,
+                    review_status=item.review_status,
                     cover_image_url=cover,
                     created_at=format_beijing(item.created_at),
                 ).model_dump(by_alias=True)
@@ -393,6 +474,7 @@ class ItemService:
             custody_type=item.custody_type,
             contact_preference=item.contact_preference,
             status=item.status,
+            review_status=item.review_status,
             image_urls=image_urls,
             verify_questions=verify_questions,
             has_active_claim=False,  # Stub
@@ -500,8 +582,12 @@ class ItemService:
                     "bizType": "LOST",
                     "itemName": item.item_name,
                     "category": item.category,
+                    "location": item.lost_location,
                     "status": item.status,
+                    "reviewStatus": item.review_status,
+                    "isSensitive": False,
                     "userId": item.user_id,
+                    "reportCount": 0,
                     "createdAt": format_beijing(item.created_at),
                 }
                 for item in lost_items
@@ -517,8 +603,12 @@ class ItemService:
                     "bizType": "FOUND",
                     "itemName": item.item_name,
                     "category": item.category,
+                    "location": item.found_location,
                     "status": item.status,
+                    "reviewStatus": item.review_status,
+                    "isSensitive": bool(item.is_sensitive),
                     "userId": item.user_id,
+                    "reportCount": 0,
                     "createdAt": format_beijing(item.created_at),
                 }
                 for item in found_items
@@ -531,24 +621,28 @@ class ItemService:
         normalized = biz_type.upper()
         if normalized == "LOST":
             lost_item = await self.get_lost_item_internal(item_id)
+            lost_item.review_status = "APPROVED" if action == "APPROVE" else "REJECTED"
             if action == "REJECT":
                 lost_item.status = "CLOSED"
-                await self._lost_repo.update(lost_item)
+            await self._lost_repo.update(lost_item)
             return {
                 "id": lost_item.id,
                 "userId": lost_item.user_id,
                 "status": lost_item.status,
+                "reviewStatus": lost_item.review_status,
                 "bizType": "LOST",
             }
         if normalized == "FOUND":
             found_item = await self.get_found_item_internal(item_id)
+            found_item.review_status = "APPROVED" if action == "APPROVE" else "REJECTED"
             if action == "REJECT":
                 found_item.status = "CLOSED"
-                await self._found_repo.update(found_item)
+            await self._found_repo.update(found_item)
             return {
                 "id": found_item.id,
                 "userId": found_item.user_id,
                 "status": found_item.status,
+                "reviewStatus": found_item.review_status,
                 "bizType": "FOUND",
             }
         raise BizError(ErrorCode.PARAM_ERROR, "bizType must be LOST or FOUND")

@@ -301,9 +301,7 @@ class ItemService:
         for idx, req in enumerate(items):
             duplicate_key = (req.item_name, req.found_time, req.found_location)
             if duplicate_key in seen_keys:
-                failures.append(
-                    CreateFoundItemsBatchFailure(index=idx, error="重复提交")
-                )
+                failures.append(CreateFoundItemsBatchFailure(index=idx, error="重复提交"))
                 continue
 
             try:
@@ -434,6 +432,126 @@ class ItemService:
         await self._session.commit()
 
         return {"id": item_id, "status": req.status}
+
+    # ---------- Internal helpers for Backend B ----------
+
+    async def get_found_item_internal(self, item_id: str) -> FoundItem:
+        item = await self._found_repo.get_by_id(item_id)
+        if item is None:
+            raise BizError(ErrorCode.ITEM_NOT_FOUND)
+        return item
+
+    async def get_lost_item_internal(self, item_id: str) -> LostItem:
+        item = await self._lost_repo.get_by_id(item_id)
+        if item is None:
+            raise BizError(ErrorCode.ITEM_NOT_FOUND)
+        return item
+
+    async def get_verify_questions_internal(self, found_item_id: str) -> list[VerifyQuestion]:
+        return await self._question_repo.get_by_found_item(found_item_id)
+
+    async def list_found_item_ids_by_user_internal(self, user_id: str) -> list[str]:
+        return await self._found_repo.list_ids_by_user(user_id)
+
+    async def update_found_status_internal(self, item_id: str, status: str) -> None:
+        item = await self.get_found_item_internal(item_id)
+        item.status = status
+        await self._found_repo.update(item)
+
+    async def update_lost_status_internal(self, item_id: str, status: str) -> None:
+        item = await self.get_lost_item_internal(item_id)
+        item.status = status
+        await self._lost_repo.update(item)
+
+    async def create_claim_proof_images_internal(
+        self, claim_id: str, image_urls: list[str]
+    ) -> None:
+        if not image_urls:
+            return
+        images = [
+            ItemImage(
+                id=generate_ulid(),
+                biz_type="CLAIM_PROOF",
+                biz_id=claim_id,
+                image_url=url,
+                sort_order=idx,
+            )
+            for idx, url in enumerate(image_urls)
+        ]
+        await self._image_repo.create_batch(images)
+
+    async def get_claim_proof_images_internal(self, claim_id: str) -> list[str]:
+        images = await self._image_repo.get_by_biz("CLAIM_PROOF", claim_id)
+        return [img.image_url for img in images]
+
+    async def list_admin_items_internal(
+        self, biz_type: str | None, offset: int, limit: int
+    ) -> tuple[list[dict[str, Any]], int]:
+        result: list[dict[str, Any]] = []
+        total = 0
+        if biz_type in {None, "LOST"}:
+            lost_items, lost_total = await self._lost_repo.list_with_filter(
+                offset=offset, limit=limit
+            )
+            total += lost_total
+            result.extend(
+                {
+                    "id": item.id,
+                    "bizType": "LOST",
+                    "itemName": item.item_name,
+                    "category": item.category,
+                    "status": item.status,
+                    "userId": item.user_id,
+                    "createdAt": format_beijing(item.created_at),
+                }
+                for item in lost_items
+            )
+        if biz_type in {None, "FOUND"}:
+            found_items, found_total = await self._found_repo.list_with_filter(
+                offset=offset, limit=limit
+            )
+            total += found_total
+            result.extend(
+                {
+                    "id": item.id,
+                    "bizType": "FOUND",
+                    "itemName": item.item_name,
+                    "category": item.category,
+                    "status": item.status,
+                    "userId": item.user_id,
+                    "createdAt": format_beijing(item.created_at),
+                }
+                for item in found_items
+            )
+        return result[:limit], total
+
+    async def review_item_internal(
+        self, biz_type: str, item_id: str, action: str
+    ) -> dict[str, str]:
+        normalized = biz_type.upper()
+        if normalized == "LOST":
+            lost_item = await self.get_lost_item_internal(item_id)
+            if action == "REJECT":
+                lost_item.status = "CLOSED"
+                await self._lost_repo.update(lost_item)
+            return {
+                "id": lost_item.id,
+                "userId": lost_item.user_id,
+                "status": lost_item.status,
+                "bizType": "LOST",
+            }
+        if normalized == "FOUND":
+            found_item = await self.get_found_item_internal(item_id)
+            if action == "REJECT":
+                found_item.status = "CLOSED"
+                await self._found_repo.update(found_item)
+            return {
+                "id": found_item.id,
+                "userId": found_item.user_id,
+                "status": found_item.status,
+                "bizType": "FOUND",
+            }
+        raise BizError(ErrorCode.PARAM_ERROR, "bizType must be LOST or FOUND")
 
     # ---------- File Upload ----------
 

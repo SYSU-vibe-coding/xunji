@@ -22,9 +22,7 @@ class MatchResultRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_pair(
-        self, lost_item_id: str, found_item_id: str
-    ) -> MatchResult | None:
+    async def get_by_pair(self, lost_item_id: str, found_item_id: str) -> MatchResult | None:
         stmt = select(MatchResult).where(
             and_(
                 MatchResult.lost_item_id == lost_item_id,

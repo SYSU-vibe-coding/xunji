@@ -124,6 +124,7 @@ async def _run(
     results = await asyncio.gather(*(score_one(p) for p in pairs))
 
     written = 0
+    high_priority_pairs: list[tuple[str, str, float]] = []
     for entry in results:
         if entry is None:
             continue
@@ -131,12 +132,65 @@ async def _run(
         total = float(scores.get("totalScore", 0))
         if total < MATCH_THRESHOLD:
             continue
-        await _upsert_match(repo, lost_id, found_id, scores)
+        match = await _upsert_match(repo, lost_id, found_id, scores)
         written += 1
+        if total >= HIGH_PRIORITY_THRESHOLD:
+            high_priority_pairs.append((match.id, found_id, total))
 
     if written:
         await session.commit()
+
+    # High-priority notifications run *after* match commit. They depend on
+    # external lookups (item owner, category) which we keep behind ItemService
+    # to respect the cross-module rules.
+    if high_priority_pairs:
+        await _push_high_priority_notices(session, item_svc, high_priority_pairs)
+
     return written
+
+
+async def _push_high_priority_notices(
+    session: AsyncSession,
+    item_svc: ItemService,
+    pairs: list[tuple[str, str, float]],
+) -> None:
+    """For matches ≥90 on CERT items, notify the lost-item owner with HIGH priority.
+
+    See matching-rules.md §3. We import NotificationService lazily to avoid
+    circular imports (notification module is unrelated at module-load time).
+    """
+    from app.notification.service import NotificationService
+
+    notify_svc = NotificationService(session)
+    pushed = 0
+    for match_id, found_id, total in pairs:
+        try:
+            found_item = await item_svc.get_found_item_internal(found_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"[match] high-priority lookup failed: {exc}")
+            continue
+        if found_item.category != "CERT":
+            continue
+        match = await MatchResultRepository(session).get_by_id(match_id)
+        if match is None:
+            continue
+        try:
+            lost_item = await item_svc.get_lost_item_internal(match.lost_item_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"[match] high-priority lost lookup failed: {exc}")
+            continue
+        await notify_svc.create_notice(
+            user_id=lost_item.user_id,
+            notice_type="MATCH_RECOMMEND",
+            title=f"高匹配度提示 (评分 {total:.0f})",
+            content=f"系统发现一条高度匹配的招领: {found_item.item_name}",
+            related_type="MATCH",
+            related_id=match_id,
+            priority="HIGH",
+        )
+        pushed += 1
+    if pushed:
+        await session.commit()
 
 
 async def _upsert_match(
@@ -144,7 +198,7 @@ async def _upsert_match(
     lost_id: str,
     found_id: str,
     scores: dict[str, Any],
-) -> None:
+) -> MatchResult:
     existing = await repo.get_by_pair(lost_id, found_id)
     if existing is None:
         match = MatchResult(
@@ -159,10 +213,11 @@ async def _upsert_match(
             match_status="NEW",
         )
         await repo.create(match)
-    else:
-        existing.image_score = Decimal(str(scores.get("imageScore", 0)))
-        existing.text_score = Decimal(str(scores.get("textScore", 0)))
-        existing.location_score = Decimal(str(scores.get("locationScore", 0)))
-        existing.time_score = Decimal(str(scores.get("timeScore", 0)))
-        existing.total_score = Decimal(str(scores.get("totalScore", 0)))
-        await repo.update(existing)
+        return match
+    existing.image_score = Decimal(str(scores.get("imageScore", 0)))
+    existing.text_score = Decimal(str(scores.get("textScore", 0)))
+    existing.location_score = Decimal(str(scores.get("locationScore", 0)))
+    existing.time_score = Decimal(str(scores.get("timeScore", 0)))
+    existing.total_score = Decimal(str(scores.get("totalScore", 0)))
+    await repo.update(existing)
+    return existing

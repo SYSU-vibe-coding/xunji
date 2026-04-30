@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 
 import ImageUploader from '@/components/ImageUploader.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { createLostItem } from '@/api/item';
 import { ApiError } from '@/api/http';
 import { categoryOptions, type ItemCategory } from '@xunji/shared';
@@ -73,11 +74,12 @@ async function submit() {
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <span class="eyebrow">Publish · Lost</span>
-      <h1>发布失物信息</h1>
-      <p>提交后系统会自动匹配相似招领，并通过站内消息提醒</p>
-    </header>
+    <PageHeader
+      eyebrow="Publish · Lost"
+      title="发布失物信息"
+      description="提交后系统会自动匹配相似招领，并通过站内消息提醒"
+      back-fallback="/"
+    />
 
     <el-card shadow="never">
       <el-form
@@ -92,7 +94,7 @@ async function submit() {
             <el-input v-model="form.itemName" maxlength="100" placeholder="如：白色 AirPods Pro" />
           </el-form-item>
           <el-form-item label="物品类别" prop="category">
-            <el-select v-model="form.category" placeholder="请选择类别">
+            <el-select v-model="form.category" placeholder="请选择类别" style="width: 100%">
               <el-option
                 v-for="opt in categoryOptions"
                 :key="opt.value"
@@ -109,6 +111,7 @@ async function submit() {
               start-placeholder="开始时间"
               end-placeholder="结束时间"
               format="YYYY-MM-DD HH:mm"
+              style="width: 100%"
             />
           </el-form-item>
           <el-form-item label="丢失地点" prop="lostLocation" class="span-2">
@@ -153,24 +156,6 @@ async function submit() {
   max-width: 880px;
 }
 
-.page-header {
-  .eyebrow {
-    color: var(--xunji-text-muted);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  h1 {
-    margin: 6px 0 4px;
-    font-size: 22px;
-  }
-  p {
-    margin: 0;
-    color: var(--xunji-text-muted);
-    font-size: 13px;
-  }
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -194,6 +179,14 @@ async function submit() {
     grid-template-columns: 1fr;
     .span-2 {
       grid-column: span 1;
+    }
+  }
+  .footer-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    .el-button {
+      width: 100%;
+      margin-left: 0 !important;
     }
   }
 }

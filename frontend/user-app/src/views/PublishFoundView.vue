@@ -5,6 +5,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { Delete, Plus } from '@element-plus/icons-vue';
 
 import ImageUploader from '@/components/ImageUploader.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { createFoundItem } from '@/api/item';
 import { ApiError } from '@/api/http';
 import {
@@ -103,11 +104,12 @@ async function submit() {
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <span class="eyebrow">Publish · Found</span>
-      <h1>登记招领信息</h1>
-      <p>填写验证问题可帮助你确认对方是真正的失主</p>
-    </header>
+    <PageHeader
+      eyebrow="Publish · Found"
+      title="登记招领信息"
+      description="填写验证问题可帮助你确认对方是真正的失主"
+      back-fallback="/"
+    />
 
     <el-card shadow="never">
       <el-form
@@ -122,7 +124,7 @@ async function submit() {
             <el-input v-model="form.itemName" maxlength="100" placeholder="如：校园一卡通" />
           </el-form-item>
           <el-form-item label="物品类别" prop="category">
-            <el-select v-model="form.category">
+            <el-select v-model="form.category" style="width: 100%">
               <el-option
                 v-for="opt in categoryOptions"
                 :key="opt.value"
@@ -137,13 +139,14 @@ async function submit() {
               type="datetime"
               placeholder="选择拾获时间"
               format="YYYY-MM-DD HH:mm"
+              style="width: 100%"
             />
           </el-form-item>
           <el-form-item label="拾获地点" prop="foundLocation">
             <el-input v-model="form.foundLocation" maxlength="100" placeholder="如：南区食堂二楼" />
           </el-form-item>
           <el-form-item label="保管方式" prop="custodyType">
-            <el-select v-model="form.custodyType">
+            <el-select v-model="form.custodyType" style="width: 100%">
               <el-option
                 v-for="opt in custodyOptions"
                 :key="opt.value"
@@ -153,7 +156,7 @@ async function submit() {
             </el-select>
           </el-form-item>
           <el-form-item label="联系方式偏好" prop="contactPreference">
-            <el-select v-model="form.contactPreference">
+            <el-select v-model="form.contactPreference" style="width: 100%">
               <el-option
                 v-for="opt in contactOptions"
                 :key="opt.value"
@@ -223,24 +226,6 @@ async function submit() {
   max-width: 880px;
 }
 
-.page-header {
-  .eyebrow {
-    color: var(--xunji-text-muted);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  h1 {
-    margin: 6px 0 4px;
-    font-size: 22px;
-  }
-  p {
-    margin: 0;
-    color: var(--xunji-text-muted);
-    font-size: 13px;
-  }
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -286,6 +271,14 @@ async function submit() {
     .q-text,
     .q-ans {
       flex: 1 1 100%;
+    }
+  }
+  .footer-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    .el-button {
+      width: 100%;
+      margin-left: 0 !important;
     }
   }
 }

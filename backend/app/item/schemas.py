@@ -333,6 +333,8 @@ class LostItemQuery(BaseModel):
     keyword: str | None = None
     location: str | None = None
     sort_by: str = Field(default="CREATED_DESC", alias="sortBy")
+    # 默认排除终态 (FOUND/CLOSED); "我的发布" 等需要看历史的页面传 true
+    include_closed: bool = Field(default=False, alias="includeClosed")
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     @field_validator("category")
@@ -364,6 +366,8 @@ class FoundItemQuery(BaseModel):
     is_sensitive: bool | None = Field(default=None, alias="isSensitive")
     custody_type: str | None = Field(default=None, alias="custodyType")
     sort_by: str = Field(default="CREATED_DESC", alias="sortBy")
+    # 默认排除终态 (RETURNED/CLOSED); "我的发布" 等需要看历史的页面传 true
+    include_closed: bool = Field(default=False, alias="includeClosed")
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     @field_validator("category")

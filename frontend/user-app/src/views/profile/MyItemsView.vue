@@ -44,8 +44,8 @@ async function load() {
   if (!auth.profile) await auth.loadProfile().catch(() => {});
   try {
     const [lostPage, foundPage] = await Promise.all([
-      listLostItems({ pageSize: 50 }),
-      listFoundItems({ pageSize: 50 }),
+      listLostItems({ pageSize: 50, includeClosed: true }),
+      listFoundItems({ pageSize: 50, includeClosed: true }),
     ]);
     const myId = auth.profile?.id ?? '';
     lostList.value = lostPage.list.filter((it) => it.userId === myId);

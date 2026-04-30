@@ -1,24 +1,47 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
-import { Aim, Bell, SwitchButton, User } from '@element-plus/icons-vue';
+import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { Aim, ArrowLeft, Bell, SwitchButton, User } from '@element-plus/icons-vue';
 
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notification';
 import { getInitial } from '@/utils/format';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 const notice = useNotificationStore();
+
+// 主 tab 由 router meta.tab 标记，不显示返回按钮
+const showBack = computed(() => !route.meta?.tab);
 
 function handleCommand(cmd: string) {
   if (cmd === 'profile') void router.push('/profile');
   if (cmd === 'logout') auth.logout();
 }
+
+function goBack() {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    void router.push('/');
+  }
+}
 </script>
 
 <template>
   <header class="app-header">
-    <div class="brand-mobile">
+    <button
+      v-if="showBack"
+      type="button"
+      class="back-btn"
+      aria-label="返回"
+      @click="goBack"
+    >
+      <el-icon :size="18"><ArrowLeft /></el-icon>
+      <span>返回</span>
+    </button>
+    <div v-else class="brand-mobile">
       <div class="logo"><el-icon :size="18" color="#fff"><Aim /></el-icon></div>
       <strong>寻迹</strong>
     </div>
@@ -59,6 +82,28 @@ function handleCommand(cmd: string) {
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 6px 8px;
+  background: transparent;
+  border: 1px solid var(--xunji-border);
+  border-radius: 999px;
+  color: var(--xunji-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: rgba(13, 79, 79, 0.06);
+    border-color: rgba(13, 79, 79, 0.3);
+  }
+  &:active {
+    background: rgba(13, 79, 79, 0.1);
+  }
 }
 
 .brand-mobile {

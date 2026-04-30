@@ -90,6 +90,14 @@ class LostItemRepository:
         count = result.scalar() or 0
         return count > 0
 
+    async def list_active(self, *, exclude_id: str | None = None) -> list[LostItem]:
+        """All lost items still being searched (status=SEARCHING)."""
+        stmt = select(LostItem).where(LostItem.status == "SEARCHING")
+        if exclude_id is not None:
+            stmt = stmt.where(LostItem.id != exclude_id)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
 
 class FoundItemRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -183,6 +191,14 @@ class FoundItemRepository:
         result = await self._session.execute(stmt)
         count = result.scalar() or 0
         return count > 0
+
+    async def list_active(self, *, exclude_id: str | None = None) -> list[FoundItem]:
+        """All found items still pending claim (status=PENDING)."""
+        stmt = select(FoundItem).where(FoundItem.status == "PENDING")
+        if exclude_id is not None:
+            stmt = stmt.where(FoundItem.id != exclude_id)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
 
 class ItemImageRepository:

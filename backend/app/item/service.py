@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.errors import BizError, ErrorCode
 from app.common.pagination import PaginationParams, paginate
 from app.common.utils import format_beijing, now_beijing
+from app.core.ai_client import AIClient
 from app.core.config import settings
 from app.db.ulid import generate_ulid
 from app.item.models import FoundItem, ItemImage, LostItem, VerifyQuestion
@@ -52,13 +53,19 @@ FOUND_STATUS_TRANSITIONS: dict[str, set[str]] = {
 
 
 class ItemService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        ai_client: AIClient | None = None,
+    ) -> None:
         self._session = session
         self._lost_repo = LostItemRepository(session)
         self._found_repo = FoundItemRepository(session)
         self._image_repo = ItemImageRepository(session)
         self._question_repo = VerifyQuestionRepository(session)
         self._log_svc = OperationLogService(session)
+        self._ai_client = ai_client
 
     # ---------- Lost Items ----------
 
@@ -309,7 +316,18 @@ class ItemService:
             raise BizError(ErrorCode.IMAGE_EXCEED)
 
         item_id = generate_ulid()
+        # Default sensitivity by category. ai-service may upgrade individual
+        # images and we OR-combine the results below.
         is_sensitive = 1 if req.category == "CERT" else 0
+        masked_per_image: dict[str, str] = {}
+        if self._ai_client is not None and req.image_urls:
+            for url in req.image_urls:
+                detection = await self._ai_client.detect_sensitive(url)
+                if detection and detection.get("isSensitive"):
+                    is_sensitive = 1
+                    masked = detection.get("maskedImageUrl")
+                    if masked:
+                        masked_per_image[url] = masked
 
         found_item = FoundItem(
             id=item_id,
@@ -335,6 +353,7 @@ class ItemService:
                     biz_type="FOUND",
                     biz_id=item_id,
                     image_url=url,
+                    masked_image_url=masked_per_image.get(url),
                     sort_order=idx,
                 )
                 for idx, url in enumerate(req.image_urls)
@@ -565,6 +584,44 @@ class ItemService:
     async def get_claim_proof_images_internal(self, claim_id: str) -> list[str]:
         images = await self._image_repo.get_by_biz("CLAIM_PROOF", claim_id)
         return [img.image_url for img in images]
+
+    # --- Match-related internal helpers ---
+
+    async def list_active_lost_items_internal(
+        self, *, exclude_id: str | None = None
+    ) -> list[LostItem]:
+        return await self._lost_repo.list_active(exclude_id=exclude_id)
+
+    async def list_active_found_items_internal(
+        self, *, exclude_id: str | None = None
+    ) -> list[FoundItem]:
+        return await self._found_repo.list_active(exclude_id=exclude_id)
+
+    async def get_lost_match_payload_internal(self, item_id: str) -> dict[str, Any] | None:
+        item = await self._lost_repo.get_by_id(item_id)
+        if item is None:
+            return None
+        images = await self._image_repo.get_by_biz("LOST", item_id)
+        return {
+            "name": item.item_name,
+            "description": item.description,
+            "location": item.lost_location,
+            "time": item.lost_time_start.isoformat() if item.lost_time_start else None,
+            "imageUrls": [img.image_url for img in images],
+        }
+
+    async def get_found_match_payload_internal(self, item_id: str) -> dict[str, Any] | None:
+        item = await self._found_repo.get_by_id(item_id)
+        if item is None:
+            return None
+        images = await self._image_repo.get_by_biz("FOUND", item_id)
+        return {
+            "name": item.item_name,
+            "description": item.description,
+            "location": item.found_location,
+            "time": item.found_time.isoformat() if item.found_time else None,
+            "imageUrls": [img.image_url for img in images],
+        }
 
     async def list_admin_items_internal(
         self, biz_type: str | None, offset: int, limit: int

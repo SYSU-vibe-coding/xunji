@@ -30,6 +30,7 @@ class LostItemRepository:
         sort_by: str = "CREATED_DESC",
         offset: int = 0,
         limit: int = 10,
+        exclude_statuses: list[str] | None = None,
     ) -> tuple[list[LostItem], int]:
         stmt = select(LostItem)
         count_stmt = select(func.count()).select_from(LostItem)
@@ -40,6 +41,9 @@ class LostItemRepository:
         if status:
             stmt = stmt.where(LostItem.status == status)
             count_stmt = count_stmt.where(LostItem.status == status)
+        elif exclude_statuses:
+            stmt = stmt.where(LostItem.status.notin_(exclude_statuses))
+            count_stmt = count_stmt.where(LostItem.status.notin_(exclude_statuses))
         if keyword:
             pattern = f"%{keyword}%"
             cond = or_(LostItem.item_name.like(pattern), LostItem.description.like(pattern))
@@ -124,6 +128,7 @@ class FoundItemRepository:
         sort_by: str = "CREATED_DESC",
         offset: int = 0,
         limit: int = 10,
+        exclude_statuses: list[str] | None = None,
     ) -> tuple[list[FoundItem], int]:
         stmt = select(FoundItem)
         count_stmt = select(func.count()).select_from(FoundItem)
@@ -134,6 +139,9 @@ class FoundItemRepository:
         if status:
             stmt = stmt.where(FoundItem.status == status)
             count_stmt = count_stmt.where(FoundItem.status == status)
+        elif exclude_statuses:
+            stmt = stmt.where(FoundItem.status.notin_(exclude_statuses))
+            count_stmt = count_stmt.where(FoundItem.status.notin_(exclude_statuses))
         if keyword:
             pattern = f"%{keyword}%"
             cond = or_(FoundItem.item_name.like(pattern), FoundItem.description.like(pattern))

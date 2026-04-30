@@ -10,12 +10,15 @@ const props = withDefaults(
     title: string;
     /** 副标题描述 */
     description?: string;
-    /** 是否显示返回按钮，默认 true */
+    /**
+     * 是否显示页面内的返回胶囊。默认 false：返回按钮已统一移到 AppHeader 顶栏。
+     * 仅在确实需要页面内额外返回入口时显式传 true。
+     */
     showBack?: boolean;
     /** 无 history 时返回的 fallback 路径，默认 / */
     backFallback?: string;
   }>(),
-  { showBack: true, backFallback: '/' },
+  { showBack: false, backFallback: '/' },
 );
 
 const router = useRouter();

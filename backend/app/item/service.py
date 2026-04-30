@@ -566,6 +566,44 @@ class ItemService:
         images = await self._image_repo.get_by_biz("CLAIM_PROOF", claim_id)
         return [img.image_url for img in images]
 
+    # --- Match-related internal helpers ---
+
+    async def list_active_lost_items_internal(
+        self, *, exclude_id: str | None = None
+    ) -> list[LostItem]:
+        return await self._lost_repo.list_active(exclude_id=exclude_id)
+
+    async def list_active_found_items_internal(
+        self, *, exclude_id: str | None = None
+    ) -> list[FoundItem]:
+        return await self._found_repo.list_active(exclude_id=exclude_id)
+
+    async def get_lost_match_payload_internal(self, item_id: str) -> dict[str, Any] | None:
+        item = await self._lost_repo.get_by_id(item_id)
+        if item is None:
+            return None
+        images = await self._image_repo.get_by_biz("LOST", item_id)
+        return {
+            "name": item.item_name,
+            "description": item.description,
+            "location": item.lost_location,
+            "time": item.lost_time_start.isoformat() if item.lost_time_start else None,
+            "imageUrls": [img.image_url for img in images],
+        }
+
+    async def get_found_match_payload_internal(self, item_id: str) -> dict[str, Any] | None:
+        item = await self._found_repo.get_by_id(item_id)
+        if item is None:
+            return None
+        images = await self._image_repo.get_by_biz("FOUND", item_id)
+        return {
+            "name": item.item_name,
+            "description": item.description,
+            "location": item.found_location,
+            "time": item.found_time.isoformat() if item.found_time else None,
+            "imageUrls": [img.image_url for img in images],
+        }
+
     async def list_admin_items_internal(
         self, biz_type: str | None, offset: int, limit: int
     ) -> tuple[list[dict[str, Any]], int]:

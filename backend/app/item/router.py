@@ -44,6 +44,7 @@ async def list_lost_items(
     keyword: str | None = Query(default=None),
     location: str | None = Query(default=None),
     sort_by: str = Query(default="CREATED_DESC", alias="sortBy"),
+    include_closed: bool = Query(default=False, alias="includeClosed"),
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
@@ -55,6 +56,7 @@ async def list_lost_items(
         keyword=keyword,
         location=location,
         sortBy=sort_by,
+        includeClosed=include_closed,
     )
     data = await svc.list_lost_items(query)
     return success(data=data)
@@ -142,6 +144,7 @@ async def list_found_items(
     is_sensitive: bool | None = Query(default=None, alias="isSensitive"),
     custody_type: str | None = Query(default=None, alias="custodyType"),
     sort_by: str = Query(default="CREATED_DESC", alias="sortBy"),
+    include_closed: bool = Query(default=False, alias="includeClosed"),
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
@@ -155,6 +158,7 @@ async def list_found_items(
         isSensitive=is_sensitive,
         custodyType=custody_type,
         sortBy=sort_by,
+        includeClosed=include_closed,
     )
     data = await svc.list_found_items(query)
     return success(data=data)

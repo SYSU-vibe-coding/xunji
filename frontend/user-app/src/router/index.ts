@@ -17,8 +17,9 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('@/layouts/AppLayout.vue'),
     children: [
-      { path: '', name: 'home', component: () => import('@/views/HomeView.vue') },
-      { path: 'search', name: 'search', component: () => import('@/views/SearchView.vue') },
+      // meta.tab=true 表示底部 dock 主 tab，顶栏不显示返回按钮
+      { path: '', name: 'home', component: () => import('@/views/HomeView.vue'), meta: { tab: true } },
+      { path: 'search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { tab: true } },
       { path: 'publish/lost', name: 'publish-lost', component: () => import('@/views/PublishLostView.vue') },
       { path: 'publish/found', name: 'publish-found', component: () => import('@/views/PublishFoundView.vue') },
       {
@@ -33,8 +34,8 @@ const routes: RouteRecordRaw[] = [
         name: 'claim-detail',
         component: () => import('@/views/claim/ClaimDetailView.vue'),
       },
-      { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
-      { path: 'profile', name: 'profile', component: () => import('@/views/profile/ProfileView.vue') },
+      { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tab: true } },
+      { path: 'profile', name: 'profile', component: () => import('@/views/profile/ProfileView.vue'), meta: { tab: true } },
       { path: 'profile/items', name: 'my-items', component: () => import('@/views/profile/MyItemsView.vue') },
       {
         path: 'profile/certification',

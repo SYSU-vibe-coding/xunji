@@ -1,7 +1,24 @@
-import { createPinia } from 'pinia';
 import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+
+import 'element-plus/dist/index.css';
+import './styles/index.scss';
+import './styles/element-overrides.scss';
 
 import App from './App.vue';
-import './styles/main.css';
+import router from './router';
+import { useAuthStore } from './stores/auth';
 
-createApp(App).use(createPinia()).mount('#app');
+const app = createApp(App);
+const pinia = createPinia();
+
+app.use(pinia);
+app.use(router);
+
+const auth = useAuthStore();
+auth
+  .restore()
+  .catch(() => {})
+  .finally(() => {
+    app.mount('#app');
+  });

@@ -312,80 +312,85 @@ class ClaimService:
     async def confirm_handover(
         self, claim_id: str, req: ConfirmHandoverRequest, current_user: CurrentUser
     ) -> dict[str, str]:
-        async with self._session.begin():
-            claim = await self._get_claim_or_raise(claim_id)
-            handover = await self._handover_repo.get_by_claim_id(claim_id)
-            if handover is None:
-                raise BizError(ErrorCode.CLAIM_INVALID_STATE, "交接尚未创建")
-            found_item = await self._item_svc.get_found_item_internal(claim.found_item_id)
-            if claim.review_status not in {"APPROVED", "HANDED_OVER"}:
-                raise BizError(ErrorCode.CLAIM_INVALID_STATE)
+        # NOTE: 历史上这里用了 `async with self._session.begin()`，但项目其他多表
+        # 写入路径都依赖 SQLAlchemy 2.x 的 autobegin + 末尾 commit。由于
+        # get_current_user 依赖在解析 JWT 时已经在同一 session 上发起过 SELECT
+        # （触发 autobegin），再调 session.begin() 会抛 InvalidRequestError。
+        # 改为统一的 commit-at-end 风格，事务边界由 autobegin 保证。
+        claim = await self._get_claim_or_raise(claim_id)
+        handover = await self._handover_repo.get_by_claim_id(claim_id)
+        if handover is None:
+            raise BizError(ErrorCode.CLAIM_INVALID_STATE, "交接尚未创建")
+        found_item = await self._item_svc.get_found_item_internal(claim.found_item_id)
+        if claim.review_status not in {"APPROVED", "HANDED_OVER"}:
+            raise BizError(ErrorCode.CLAIM_INVALID_STATE)
 
-            if req.role == "OWNER":
-                if claim.claimant_id != current_user.id:
-                    raise BizError(ErrorCode.CLAIM_NOT_PARTY)
-                handover.owner_confirmed = 1
-            else:
-                if found_item.user_id != current_user.id:
-                    raise BizError(ErrorCode.CLAIM_NOT_PARTY)
-                handover.finder_confirmed = 1
+        if req.role == "OWNER":
+            if claim.claimant_id != current_user.id:
+                raise BizError(ErrorCode.CLAIM_NOT_PARTY)
+            handover.owner_confirmed = 1
+        else:
+            if found_item.user_id != current_user.id:
+                raise BizError(ErrorCode.CLAIM_NOT_PARTY)
+            handover.finder_confirmed = 1
+        await self._handover_repo.update(handover)
+
+        if (
+            handover.owner_confirmed
+            and handover.finder_confirmed
+            and claim.review_status != "HANDED_OVER"
+        ):
+            handover.completed_at = now_beijing().replace(tzinfo=None)
+            claim.review_status = "HANDED_OVER"
             await self._handover_repo.update(handover)
-
-            if (
-                handover.owner_confirmed
-                and handover.finder_confirmed
-                and claim.review_status != "HANDED_OVER"
-            ):
-                handover.completed_at = now_beijing().replace(tzinfo=None)
-                claim.review_status = "HANDED_OVER"
-                await self._handover_repo.update(handover)
-                await self._claim_repo.update(claim)
-                await self._item_svc.update_found_status_internal(claim.found_item_id, "RETURNED")
-                if claim.match_id:
-                    match = await self._match_svc.get_by_id(claim.match_id)
-                    if match is not None:
-                        await self._item_svc.update_lost_status_internal(
-                            match.lost_item_id, "FOUND"
-                        )
-
-                await self._credit_svc.change_credit(
-                    user_id=claim.claimant_id,
-                    delta_score=10,
-                    reason_code="HANDOVER_SUCCESS",
-                    reason_text="交接完成",
-                    biz_type="CLAIM",
-                    biz_id=claim_id,
-                    operator_id=current_user.id,
-                    operator_role=current_user.role,
-                )
-                await self._credit_svc.change_credit(
-                    user_id=found_item.user_id,
-                    delta_score=10,
-                    reason_code="HANDOVER_SUCCESS",
-                    reason_text="交接完成",
-                    biz_type="CLAIM",
-                    biz_id=claim_id,
-                    operator_id=current_user.id,
-                    operator_role=current_user.role,
-                )
-                for user_id in {claim.claimant_id, found_item.user_id}:
-                    await self._notification_svc.create_notice(
-                        user_id=user_id,
-                        notice_type="HANDOVER_REMINDER",
-                        title="交接已完成",
-                        content="双方已确认交接完成",
-                        related_type="CLAIM",
-                        related_id=claim_id,
-                        priority="HIGH",
+            await self._claim_repo.update(claim)
+            await self._item_svc.update_found_status_internal(claim.found_item_id, "RETURNED")
+            if claim.match_id:
+                match = await self._match_svc.get_by_id(claim.match_id)
+                if match is not None:
+                    await self._item_svc.update_lost_status_internal(
+                        match.lost_item_id, "FOUND"
                     )
-            await self._log_svc.create_log(
-                operator_id=current_user.id,
-                operator_role=current_user.role,
+
+            await self._credit_svc.change_credit(
+                user_id=claim.claimant_id,
+                delta_score=10,
+                reason_code="HANDOVER_SUCCESS",
+                reason_text="交接完成",
                 biz_type="CLAIM",
                 biz_id=claim_id,
-                action="HANDOVER_CONFIRM",
-                detail=f"交接确认: {req.role}",
+                operator_id=current_user.id,
+                operator_role=current_user.role,
             )
+            await self._credit_svc.change_credit(
+                user_id=found_item.user_id,
+                delta_score=10,
+                reason_code="HANDOVER_SUCCESS",
+                reason_text="交接完成",
+                biz_type="CLAIM",
+                biz_id=claim_id,
+                operator_id=current_user.id,
+                operator_role=current_user.role,
+            )
+            for user_id in {claim.claimant_id, found_item.user_id}:
+                await self._notification_svc.create_notice(
+                    user_id=user_id,
+                    notice_type="HANDOVER_REMINDER",
+                    title="交接已完成",
+                    content="双方已确认交接完成",
+                    related_type="CLAIM",
+                    related_id=claim_id,
+                    priority="HIGH",
+                )
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="CLAIM",
+            biz_id=claim_id,
+            action="HANDOVER_CONFIRM",
+            detail=f"交接确认: {req.role}",
+        )
+        await self._session.commit()
         return {"id": claim_id, "reviewStatus": claim.review_status}
 
     def _build_initial_claim_state(

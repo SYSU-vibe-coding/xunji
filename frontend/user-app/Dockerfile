@@ -18,5 +18,7 @@ RUN pnpm build
 
 FROM nginx:1.27-alpine
 COPY frontend/user-app/nginx.conf /etc/nginx/conf.d/default.conf
+COPY deploy/docker/frontend/40-resolver.sh /docker-entrypoint.d/40-resolver.sh
+RUN chmod +x /docker-entrypoint.d/40-resolver.sh
 COPY --from=builder /app/frontend/user-app/dist /usr/share/nginx/html
 EXPOSE 80

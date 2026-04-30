@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import ImageUploader from '@/components/ImageUploader.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { getMyCertification, submitCertification } from '@/api/user';
 import { ApiError } from '@/api/http';
@@ -67,11 +68,12 @@ onMounted(load);
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <span class="eyebrow">Certification</span>
-      <h1>实名认证</h1>
-      <p>认证后可发布招领、参与高敏感物品认领</p>
-    </header>
+    <PageHeader
+      eyebrow="Certification"
+      title="实名认证"
+      description="认证后可发布招领、参与高敏感物品认领"
+      back-fallback="/profile"
+    />
 
     <el-skeleton v-if="loading" :rows="4" animated />
     <template v-else>
@@ -118,23 +120,6 @@ onMounted(load);
   flex-direction: column;
   gap: 18px;
   max-width: 720px;
-}
-.page-header {
-  .eyebrow {
-    color: var(--xunji-text-muted);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  h1 {
-    margin: 6px 0 4px;
-    font-size: 22px;
-  }
-  p {
-    margin: 0;
-    color: var(--xunji-text-muted);
-    font-size: 13px;
-  }
 }
 .status-card {
   .row {

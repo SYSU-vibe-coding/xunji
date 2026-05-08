@@ -6,11 +6,11 @@ See the root `CODEBUDDY.md` for task-to-document routing, hard rules, and the fu
 
 ## Current status
 
-At the moment, only `pyproject.toml` and this README are committed in `backend/`. `app/`, `alembic/`, `tests/`, and `uv.lock` are target bootstrap artifacts, not files that already exist in this tree.
+The backend scaffold has landed with FastAPI application wiring, SQLAlchemy async DB
+session setup, Alembic configuration, user/auth APIs, item publish/search APIs,
+operation logs, SQL schema, and focused unit tests.
 
-## Command contract (after scaffold lands)
-
-Run the commands below after the backend scaffold has been added.
+## Command contract
 
 ```bash
 # setup

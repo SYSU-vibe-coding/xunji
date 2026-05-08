@@ -9,6 +9,7 @@ import type {
   HandoverMethod,
   ItemCategory,
   LostItemStatus,
+  MatchStatus,
   NoticeType,
   ReportHandleStatus,
   ReportTargetType,
@@ -37,6 +38,13 @@ export const foundStatusLabels: Record<FoundItemStatus, string> = {
   CLAIMING: '认领中',
   RETURNED: '已归还',
   CLOSED: '已关闭',
+};
+
+export const matchStatusLabels: Record<MatchStatus, string> = {
+  NEW: '新匹配',
+  READ: '已查看',
+  CLAIMED: '已认领',
+  EXPIRED: '已过期',
 };
 
 export const reviewStatusLabels: Record<ReviewStatus, string> = {

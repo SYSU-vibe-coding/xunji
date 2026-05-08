@@ -312,11 +312,10 @@ class ClaimService:
     async def confirm_handover(
         self, claim_id: str, req: ConfirmHandoverRequest, current_user: CurrentUser
     ) -> dict[str, str]:
-        # NOTE: 历史上这里用了 `async with self._session.begin()`，但项目其他多表
-        # 写入路径都依赖 SQLAlchemy 2.x 的 autobegin + 末尾 commit。由于
-        # get_current_user 依赖在解析 JWT 时已经在同一 session 上发起过 SELECT
-        # （触发 autobegin），再调 session.begin() 会抛 InvalidRequestError。
-        # 改为统一的 commit-at-end 风格，事务边界由 autobegin 保证。
+        # Keep this path aligned with the rest of the service: let SQLAlchemy
+        # autobegin the transaction and commit once at the end. Calling
+        # session.begin() here can fail after get_current_user has already
+        # issued a SELECT on the same session.
         claim = await self._get_claim_or_raise(claim_id)
         handover = await self._handover_repo.get_by_claim_id(claim_id)
         if handover is None:
@@ -348,9 +347,7 @@ class ClaimService:
             if claim.match_id:
                 match = await self._match_svc.get_by_id(claim.match_id)
                 if match is not None:
-                    await self._item_svc.update_lost_status_internal(
-                        match.lost_item_id, "FOUND"
-                    )
+                    await self._item_svc.update_lost_status_internal(match.lost_item_id, "FOUND")
 
             await self._credit_svc.change_credit(
                 user_id=claim.claimant_id,

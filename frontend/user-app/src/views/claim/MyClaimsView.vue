@@ -5,12 +5,12 @@ import { useRouter } from 'vue-router';
 import EmptyState from '@/components/EmptyState.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { listMyClaims } from '@/api/claim';
-import { ApiError } from '@/api/http';
-import {
-  type ClaimMyRole,
-  type ClaimSummary,
-  verifyLevelLabels,
+import { isAuthApiError } from '@/api/http';
+import type {
+  ClaimMyRole,
+  ClaimSummary,
 } from '@xunji/shared';
+import { verifyLevelLabels } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
 
 const router = useRouter();
@@ -28,7 +28,7 @@ async function load() {
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     list.value = [];
     total.value = 0;
   } finally {

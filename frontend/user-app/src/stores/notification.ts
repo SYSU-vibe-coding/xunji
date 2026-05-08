@@ -1,8 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-
 import { getUnreadCount } from '@/api/notification';
-import { ApiError } from '@/api/http';
+import { isAuthApiError } from '@/api/http';
 
 export const useNotificationStore = defineStore('notification', () => {
   const unreadTotal = ref(0);
@@ -14,7 +13,7 @@ export const useNotificationStore = defineStore('notification', () => {
       unreadTotal.value = data.total;
       byType.value = data.byType ?? {};
     } catch (err) {
-      if (err instanceof ApiError && err.code === 40002) return;
+      if (isAuthApiError(err)) return;
       // 静默失败：未读数不是关键路径
       unreadTotal.value = 0;
     }

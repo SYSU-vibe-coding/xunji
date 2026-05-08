@@ -9,6 +9,8 @@ from loguru import logger
 from minio import Minio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.models import Report
+from app.claim.repository import ClaimRequestRepository
 from app.common.errors import BizError, ErrorCode
 from app.common.pagination import PaginationParams, paginate
 from app.common.utils import format_beijing, now_beijing
@@ -19,6 +21,7 @@ from app.item.models import FoundItem, ItemImage, LostItem, VerifyQuestion
 from app.item.repository import (
     FoundItemRepository,
     ItemImageRepository,
+    ItemReportRepository,
     LostItemRepository,
     VerifyQuestionRepository,
 )
@@ -38,6 +41,9 @@ from app.item.schemas import (
     LostItemDetail,
     LostItemListItem,
     LostItemQuery,
+    SubmitReportRequest,
+    SubmitReportResponse,
+    UpdateFoundItemRequest,
     UpdateLostItemRequest,
     VerifyQuestionOutput,
 )
@@ -50,6 +56,7 @@ LOST_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 FOUND_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "PENDING": {"CLOSED"},
+    "CLAIMING": {"CLOSED"},
 }
 
 
@@ -65,6 +72,8 @@ class ItemService:
         self._found_repo = FoundItemRepository(session)
         self._image_repo = ItemImageRepository(session)
         self._question_repo = VerifyQuestionRepository(session)
+        self._report_repo = ItemReportRepository(session)
+        self._claim_repo = ClaimRequestRepository(session)
         self._log_svc = OperationLogService(session)
         self._ai_client = ai_client
 
@@ -167,6 +176,45 @@ class ItemService:
         params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
         return paginate(result_list, total, params)
 
+    async def list_my_lost_items(
+        self, query: LostItemQuery, current_user: CurrentUser
+    ) -> dict[str, Any]:
+        offset = (query.page_no - 1) * query.page_size
+        items, total = await self._lost_repo.list_with_filter(
+            category=query.category,
+            status=query.status,
+            keyword=query.keyword,
+            location=query.location,
+            user_id=current_user.id,
+            sort_by=query.sort_by,
+            offset=offset,
+            limit=query.page_size,
+        )
+
+        result_list = []
+        for item in items:
+            images = await self._image_repo.get_by_biz("LOST", item.id)
+            cover = images[0].image_url if images else None
+            result_list.append(
+                LostItemListItem(
+                    id=item.id,
+                    user_id=item.user_id,
+                    item_name=item.item_name,
+                    category=item.category,
+                    description=item.description,
+                    lost_time_start=format_beijing(item.lost_time_start),
+                    lost_time_end=format_beijing(item.lost_time_end),
+                    lost_location=item.lost_location,
+                    status=item.status,
+                    review_status=item.review_status,
+                    cover_image_url=cover,
+                    created_at=format_beijing(item.created_at),
+                ).model_dump(by_alias=True)
+            )
+
+        params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
+        return paginate(result_list, total, params)
+
     async def get_lost_item_detail(self, item_id: str, current_user: CurrentUser) -> dict[str, Any]:
         item = await self._lost_repo.get_by_id(item_id)
         if item is None:
@@ -178,7 +226,7 @@ class ItemService:
 
         match_count = None
         if item.user_id == current_user.id:
-            match_count = 0  # Stub
+            match_count = await self._lost_repo.count_matches(item_id)
 
         detail = LostItemDetail(
             id=item.id,
@@ -279,7 +327,9 @@ class ItemService:
         item = await self._lost_repo.get_by_id(item_id)
         if item is None:
             raise BizError(ErrorCode.ITEM_NOT_FOUND)
-        if item.user_id != current_user.id:
+        is_owner = item.user_id == current_user.id
+        is_admin = current_user.role == "ADMIN"
+        if not is_owner and not is_admin:
             raise BizError(ErrorCode.NOT_PUBLISHER)
 
         allowed = LOST_STATUS_TRANSITIONS.get(item.status, set())
@@ -466,6 +516,52 @@ class ItemService:
         params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
         return paginate(result_list, total, params)
 
+    async def list_my_found_items(
+        self, query: FoundItemQuery, current_user: CurrentUser
+    ) -> dict[str, Any]:
+        offset = (query.page_no - 1) * query.page_size
+        items, total = await self._found_repo.list_with_filter(
+            category=query.category,
+            status=query.status,
+            keyword=query.keyword,
+            location=query.location,
+            user_id=current_user.id,
+            is_sensitive=query.is_sensitive,
+            custody_type=query.custody_type,
+            sort_by=query.sort_by,
+            offset=offset,
+            limit=query.page_size,
+        )
+
+        result_list = []
+        for item in items:
+            images = await self._image_repo.get_by_biz("FOUND", item.id)
+            cover = None
+            if images:
+                cover = images[0].masked_image_url if item.is_sensitive else images[0].image_url
+
+            result_list.append(
+                FoundItemListItem(
+                    id=item.id,
+                    user_id=item.user_id,
+                    item_name=item.item_name,
+                    category=item.category,
+                    description=item.description,
+                    found_time=format_beijing(item.found_time),
+                    found_location=item.found_location,
+                    is_sensitive=bool(item.is_sensitive),
+                    custody_type=item.custody_type,
+                    contact_preference=item.contact_preference,
+                    status=item.status,
+                    review_status=item.review_status,
+                    cover_image_url=cover,
+                    created_at=format_beijing(item.created_at),
+                ).model_dump(by_alias=True)
+            )
+
+        params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
+        return paginate(result_list, total, params)
+
     async def get_found_item_detail(
         self, item_id: str, current_user: CurrentUser
     ) -> dict[str, Any]:
@@ -503,11 +599,89 @@ class ItemService:
             review_status=item.review_status,
             image_urls=image_urls,
             verify_questions=verify_questions,
-            has_active_claim=False,  # Stub
+            has_active_claim=await self._claim_repo.has_active_claim(item_id),
             created_at=format_beijing(item.created_at),
             updated_at=format_beijing(item.updated_at),
         )
         return detail.model_dump(by_alias=True)
+
+    async def update_found_item(
+        self, item_id: str, req: UpdateFoundItemRequest, current_user: CurrentUser
+    ) -> dict[str, str]:
+        item = await self._found_repo.get_by_id(item_id)
+        if item is None:
+            raise BizError(ErrorCode.ITEM_NOT_FOUND)
+        if item.user_id != current_user.id:
+            raise BizError(ErrorCode.NOT_PUBLISHER)
+        if item.status == "RETURNED":
+            raise BizError(ErrorCode.INVALID_STATE)
+
+        if len(req.image_urls) > 5:
+            raise BizError(ErrorCode.IMAGE_EXCEED)
+
+        is_sensitive = 1 if req.category == "CERT" else 0
+        masked_per_image: dict[str, str] = {}
+        if self._ai_client is not None and req.image_urls:
+            for url in req.image_urls:
+                detection = await self._ai_client.detect_sensitive(url)
+                if detection and detection.get("isSensitive"):
+                    is_sensitive = 1
+                    masked = detection.get("maskedImageUrl")
+                    if masked:
+                        masked_per_image[url] = masked
+
+        item.item_name = req.item_name
+        item.category = req.category
+        item.description = req.description
+        item.found_time = datetime.strptime(req.found_time, "%Y-%m-%d %H:%M:%S")
+        item.found_location = req.found_location
+        item.is_sensitive = is_sensitive
+        item.custody_type = req.custody_type
+        item.contact_preference = req.contact_preference
+        if item.status == "CLOSED":
+            item.status = "PENDING"
+        item.review_status = "PENDING"
+
+        await self._found_repo.update(item)
+        await self._image_repo.delete_by_biz("FOUND", item_id)
+        if req.image_urls:
+            images = [
+                ItemImage(
+                    id=generate_ulid(),
+                    biz_type="FOUND",
+                    biz_id=item_id,
+                    image_url=url,
+                    masked_image_url=masked_per_image.get(url),
+                    sort_order=idx,
+                )
+                for idx, url in enumerate(req.image_urls)
+            ]
+            await self._image_repo.create_batch(images)
+
+        if req.verify_questions is not None:
+            await self._question_repo.delete_by_found_item(item_id)
+            if req.verify_questions:
+                questions = [
+                    VerifyQuestion(
+                        id=generate_ulid(),
+                        found_item_id=item_id,
+                        question_text=q.question_text,
+                        answer_keywords=json.dumps(q.answer_keywords, ensure_ascii=False),
+                    )
+                    for q in req.verify_questions
+                ]
+                await self._question_repo.create_batch(questions)
+
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="FOUND",
+            biz_id=item_id,
+            action="UPDATE",
+            detail=f"淇敼鎷涢: {req.item_name}",
+        )
+        await self._session.commit()
+        return {"id": item_id, "status": item.status, "reviewStatus": item.review_status}
 
     async def change_found_item_status(
         self, item_id: str, req: ChangeStatusRequest, current_user: CurrentUser
@@ -639,6 +813,9 @@ class ItemService:
             lost_items, lost_total = await self._lost_repo.list_with_filter(
                 offset=offset, limit=limit
             )
+            report_counts = await self._report_repo.count_by_targets(
+                "LOST_ITEM", [item.id for item in lost_items]
+            )
             total += lost_total
             result.extend(
                 {
@@ -651,7 +828,7 @@ class ItemService:
                     "reviewStatus": item.review_status,
                     "isSensitive": False,
                     "userId": item.user_id,
-                    "reportCount": 0,
+                    "reportCount": report_counts.get(item.id, 0),
                     "createdAt": format_beijing(item.created_at),
                 }
                 for item in lost_items
@@ -659,6 +836,9 @@ class ItemService:
         if biz_type in {None, "FOUND"}:
             found_items, found_total = await self._found_repo.list_with_filter(
                 offset=offset, limit=limit
+            )
+            report_counts = await self._report_repo.count_by_targets(
+                "FOUND_ITEM", [item.id for item in found_items]
             )
             total += found_total
             result.extend(
@@ -672,12 +852,58 @@ class ItemService:
                     "reviewStatus": item.review_status,
                     "isSensitive": bool(item.is_sensitive),
                     "userId": item.user_id,
-                    "reportCount": 0,
+                    "reportCount": report_counts.get(item.id, 0),
                     "createdAt": format_beijing(item.created_at),
                 }
                 for item in found_items
             )
         return result[:limit], total
+
+    async def submit_report(
+        self, req: SubmitReportRequest, current_user: CurrentUser
+    ) -> SubmitReportResponse:
+        if req.target_type == "LOST_ITEM":
+            target_user_id = None
+            lost_target = await self._lost_repo.get_by_id(req.target_id)
+            if lost_target is not None:
+                target_user_id = lost_target.user_id
+        else:
+            target_user_id = None
+            found_target = await self._found_repo.get_by_id(req.target_id)
+            if found_target is not None:
+                target_user_id = found_target.user_id
+        if target_user_id is None:
+            raise BizError(ErrorCode.REPORT_TARGET_NOT_FOUND)
+
+        exists = await self._report_repo.exists_by_reporter_and_target(
+            reporter_id=current_user.id,
+            target_type=req.target_type,
+            target_id=req.target_id,
+        )
+        if exists:
+            raise BizError(ErrorCode.REPORT_DUPLICATE)
+
+        report = Report(
+            id=generate_ulid(),
+            reporter_id=current_user.id,
+            reported_user_id=target_user_id,
+            target_type=req.target_type,
+            target_id=req.target_id,
+            reason=req.reason,
+            description=req.description,
+            handle_status="PENDING",
+        )
+        await self._report_repo.create(report)
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="REPORT",
+            biz_id=report.id,
+            action="CREATE",
+            detail=f"提交举报: {req.target_type}/{req.target_id}",
+        )
+        await self._session.commit()
+        return SubmitReportResponse(id=report.id, handle_status=report.handle_status)
 
     async def review_item_internal(
         self, biz_type: str, item_id: str, action: str

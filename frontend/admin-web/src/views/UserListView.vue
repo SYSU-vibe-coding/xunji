@@ -1,22 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
 
 import StatusTag from '@/components/StatusTag.vue';
 import { changeUserStatus, listAdminUsers } from '@/api/admin';
-import { ApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import {
   type AdminUserRecord,
+  type UserRole,
+  type UserStatus,
   userRoleLabels,
+  userStatusLabels,
 } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
+
+const route = useRoute();
 
 const list = ref<AdminUserRecord[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = 10;
-const keyword = ref('');
+const keyword = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '');
+const role = ref<UserRole | ''>('');
+const status = ref<UserStatus | ''>('');
 const loading = ref(true);
 
 async function load() {
@@ -26,12 +34,15 @@ async function load() {
       pageNo: page.value,
       pageSize,
       keyword: keyword.value.trim() || undefined,
+      role: role.value || undefined,
+      status: status.value || undefined,
     });
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     list.value = [];
+    total.value = 0;
   } finally {
     loading.value = false;
   }
@@ -39,18 +50,11 @@ async function load() {
 
 async function toggleStatus(record: AdminUserRecord) {
   if (record.role === 'ADMIN') {
-    ElMessage.warning('管理员账号不可在此处修改状态');
+    ElMessage.warning('管理员账号不能在此处修改状态');
     return;
   }
   const next = record.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
   const verb = next === 'DISABLED' ? '禁用' : '启用';
-  try {
-    await ElMessageBox.confirm(`确认${verb}用户「${record.nickname}」？`, '账号操作', {
-      type: 'warning',
-    });
-  } catch {
-    return;
-  }
   try {
     await changeUserStatus(record.id, {
       status: next,
@@ -68,28 +72,70 @@ function search() {
   void load();
 }
 
+watch(
+  () => route.query.keyword,
+  (value) => {
+    const next = typeof value === 'string' ? value : '';
+    if (next === keyword.value) return;
+    keyword.value = next;
+    search();
+  },
+);
+
 onMounted(load);
 </script>
 
 <template>
   <div class="page">
     <el-card shadow="never" class="filter-card">
-      <el-input
-        v-model="keyword"
-        size="large"
-        placeholder="搜索：手机号 / 昵称 / 用户 ID"
-        clearable
-        style="max-width: 420px"
-        @keyup.enter="search"
-        @clear="search"
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-        <template #append>
-          <el-button @click="search">搜索</el-button>
-        </template>
-      </el-input>
+      <div class="filters">
+        <el-input
+          v-model="keyword"
+          size="large"
+          placeholder="搜索：手机号 / 昵称 / 用户 ID"
+          clearable
+          class="keyword"
+          @keyup.enter="search"
+          @clear="search"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+          <template #append>
+            <el-button @click="search">搜索</el-button>
+          </template>
+        </el-input>
+        <el-select
+          v-model="role"
+          clearable
+          placeholder="角色"
+          style="width: 150px"
+          @change="search"
+          @clear="search"
+        >
+          <el-option
+            v-for="(label, value) in userRoleLabels"
+            :key="value"
+            :label="label"
+            :value="value"
+          />
+        </el-select>
+        <el-select
+          v-model="status"
+          clearable
+          placeholder="账号状态"
+          style="width: 150px"
+          @change="search"
+          @clear="search"
+        >
+          <el-option
+            v-for="(label, value) in userStatusLabels"
+            :key="value"
+            :label="label"
+            :value="value"
+          />
+        </el-select>
+      </div>
     </el-card>
 
     <el-card shadow="never">
@@ -102,7 +148,9 @@ onMounted(load);
         </el-table-column>
         <el-table-column label="角色" width="120">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ userRoleLabels[row.role as keyof typeof userRoleLabels] }}</el-tag>
+            <el-tag size="small" effect="plain">
+              {{ userRoleLabels[row.role as keyof typeof userRoleLabels] }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="认证" width="120">
@@ -110,7 +158,7 @@ onMounted(load);
             <StatusTag variant="cert" :value="row.certStatus" />
           </template>
         </el-table-column>
-        <el-table-column prop="creditScore" label="信誉分" width="100" align="center" />
+        <el-table-column prop="creditScore" label="信用分" width="100" align="center" />
         <el-table-column label="账号状态" width="120">
           <template #default="{ row }">
             <StatusTag variant="user" :value="row.status" />
@@ -163,6 +211,15 @@ onMounted(load);
 }
 .filter-card :deep(.el-card__body) {
   padding: 14px 16px;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.keyword {
+  max-width: 420px;
 }
 .muted {
   color: var(--xunji-text-muted);

@@ -29,8 +29,11 @@
 | POST | /api/v1/found-items/batch | STAFF |
 | GET | /api/v1/lost-items | 用户 |
 | GET | /api/v1/found-items | 用户 |
+| GET | /api/v1/me/lost-items | 用户 |
+| GET | /api/v1/me/found-items | 用户 |
 | GET | /api/v1/lost-items/{id} | 用户 |
 | GET | /api/v1/found-items/{id} | 用户 |
+| PUT | /api/v1/found-items/{id} | 用户（本人）/ STAFF |
 | PATCH | /api/v1/lost-items/{id}/status | 用户（本人） |
 | PATCH | /api/v1/found-items/{id}/status | ADMIN / 用户（本人） |
 | POST | /api/v1/files/upload | 用户 |

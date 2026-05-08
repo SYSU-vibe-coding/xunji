@@ -101,7 +101,7 @@
 1. 标记对应方 `*_confirmed = 1`
 2. 双方都确认 → `handover_records.completed_at = now`
 3. `claim_requests.review_status = HANDED_OVER`
-4. `lost_items.status = FOUND`，`found_items.status = RETURNED`
+4. `found_items.status = RETURNED`；若该认领来自匹配结果（`matchId` 非空），同步将关联 `lost_items.status = FOUND`
 5. 写积分（见 `../architecture/credit-rules.md` `HANDOVER_SUCCESS`）
 6. 发 `NoticeType = HANDOVER_REMINDER` 给双方
 

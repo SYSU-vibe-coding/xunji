@@ -12,6 +12,7 @@ VALID_CUSTODY_TYPES = {"SELF", "SECURITY", "OFFICE"}
 VALID_CONTACT_PREFERENCES = {"IN_APP", "PHONE"}
 VALID_BIZ_TYPES = {"LOST", "FOUND", "CLAIM_PROOF", "CERT"}
 VALID_SORT_OPTIONS = {"CREATED_DESC", "CREATED_ASC"}
+VALID_REPORT_TARGET_TYPES = {"LOST_ITEM", "FOUND_ITEM"}
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -244,6 +245,67 @@ class CreateFoundItemResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+class UpdateFoundItemRequest(BaseModel):
+    item_name: str = Field(..., min_length=1, max_length=100)
+    category: str
+    description: str | None = Field(None, max_length=500)
+    found_time: str
+    found_location: str = Field(..., min_length=1, max_length=100)
+    custody_type: str
+    contact_preference: str
+    image_urls: list[str] = Field(default_factory=list)
+    verify_questions: list[VerifyQuestionInput] | None = None
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in VALID_ITEM_CATEGORIES:
+            msg = f"category must be one of {VALID_ITEM_CATEGORIES}"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("found_time")
+    @classmethod
+    def validate_found_time_format(cls, v: str) -> str:
+        _parse_datetime(v, "foundTime")
+        return v
+
+    @field_validator("custody_type")
+    @classmethod
+    def validate_custody(cls, v: str) -> str:
+        if v not in VALID_CUSTODY_TYPES:
+            msg = f"custodyType must be one of {VALID_CUSTODY_TYPES}"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("contact_preference")
+    @classmethod
+    def validate_contact(cls, v: str) -> str:
+        if v not in VALID_CONTACT_PREFERENCES:
+            msg = f"contactPreference must be one of {VALID_CONTACT_PREFERENCES}"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("image_urls")
+    @classmethod
+    def validate_image_count(cls, v: list[str]) -> list[str]:
+        if len(v) > 5:
+            msg = "imageUrls max size is 5"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("verify_questions")
+    @classmethod
+    def validate_questions_count(
+        cls, v: list[VerifyQuestionInput] | None
+    ) -> list[VerifyQuestionInput] | None:
+        if v is not None and len(v) > 3:
+            msg = "verifyQuestions max size is 3"
+            raise ValueError(msg)
+        return v
+
+
 class FoundItemListItem(BaseModel):
     id: str
     user_id: str
@@ -303,6 +365,28 @@ class ChangeStatusRequest(BaseModel):
             msg = f"status must be one of {VALID_LOST_STATUSES | VALID_FOUND_STATUSES}"
             raise ValueError(msg)
         return v
+
+
+class SubmitReportRequest(BaseModel):
+    target_type: str = Field(..., alias="targetType")
+    target_id: str = Field(..., alias="targetId")
+    reason: str = Field(..., min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    @field_validator("target_type")
+    @classmethod
+    def validate_target_type(cls, v: str) -> str:
+        if v not in VALID_REPORT_TARGET_TYPES:
+            msg = f"targetType must be one of {VALID_REPORT_TARGET_TYPES}"
+            raise ValueError(msg)
+        return v
+
+
+class SubmitReportResponse(BaseModel):
+    id: str
+    handle_status: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class CreateFoundItemsBatchFailure(BaseModel):

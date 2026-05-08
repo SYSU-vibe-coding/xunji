@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     SMS_CODE_TTL_SECONDS: int = 300  # 5 minutes
     SMS_CODE_COOLDOWN_SECONDS: int = 60  # 60s between sends
 
+    def insecure_default_warnings(self) -> list[str]:
+        warnings: list[str] = []
+        if self.JWT_SECRET_KEY == "change-me-in-production":
+            warnings.append("JWT_SECRET_KEY is using the default development value.")
+        if self.ADMIN_PASSWORD == "admin123456":
+            warnings.append("ADMIN_PASSWORD is using the default development value.")
+        return warnings
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

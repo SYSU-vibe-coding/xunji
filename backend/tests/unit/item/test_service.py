@@ -1,17 +1,26 @@
 import pytest
+from app.admin.models import Report
+from app.claim.models import ClaimRequest
 from app.common.errors import BizError, ErrorCode
+from app.db.ulid import generate_ulid
 from app.item.schemas import (
     ChangeStatusRequest,
     CreateFoundItemRequest,
     CreateLostItemRequest,
     FoundItemQuery,
     LostItemQuery,
+    SubmitReportRequest,
+    UpdateFoundItemRequest,
     VerifyQuestionInput,
 )
 from app.item.service import ItemService
+from app.match.models import MatchResult
 from app.user.schemas import CurrentUser
+from sqlalchemy import select
 
 MOCK_USER = CurrentUser(id="01TESTUSER000000000000001", role="USER", status="ACTIVE")
+OTHER_USER = CurrentUser(id="01OTHERUSER00000000000001", role="USER", status="ACTIVE")
+ADMIN_USER = CurrentUser(id="01TESTADMIN00000000000001", role="ADMIN", status="ACTIVE")
 
 
 class TestLostItemService:
@@ -121,6 +130,137 @@ class TestLostItemService:
             )
         assert exc_info.value.code == ErrorCode.NOT_PUBLISHER
 
+    async def test_lost_detail_uses_real_match_count_for_publisher(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        bg = BackgroundTasks()
+        lost = await svc.create_lost_item(
+            CreateLostItemRequest(
+                itemName="Camera",
+                category="ELECTRONIC",
+                lostTimeStart="2026-04-25 10:00:00",
+                lostTimeEnd="2026-04-25 11:00:00",
+                lostLocation="Library",
+            ),
+            MOCK_USER,
+            bg,
+        )
+        found = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Camera",
+                category="ELECTRONIC",
+                foundTime="2026-04-25 12:00:00",
+                foundLocation="Library",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            OTHER_USER,
+            bg,
+        )
+        session.add(
+            MatchResult(
+                id=generate_ulid(),
+                lost_item_id=lost.id,
+                found_item_id=found.id,
+                match_status="NEW",
+            )
+        )
+        await session.commit()
+
+        owner_detail = await svc.get_lost_item_detail(lost.id, MOCK_USER)
+        other_detail = await svc.get_lost_item_detail(lost.id, OTHER_USER)
+
+        assert owner_detail["matchCount"] == 1
+        assert other_detail["matchCount"] is None
+
+    async def test_list_my_lost_items_only_returns_current_user_items(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        bg = BackgroundTasks()
+        mine = await svc.create_lost_item(
+            CreateLostItemRequest(
+                itemName="My Wallet",
+                category="DAILY_USE",
+                lostTimeStart="2026-04-26 10:00:00",
+                lostTimeEnd="2026-04-26 11:00:00",
+                lostLocation="Gate",
+            ),
+            MOCK_USER,
+            bg,
+        )
+        await svc.create_lost_item(
+            CreateLostItemRequest(
+                itemName="Other Wallet",
+                category="DAILY_USE",
+                lostTimeStart="2026-04-26 10:00:00",
+                lostTimeEnd="2026-04-26 11:00:00",
+                lostLocation="Gate",
+            ),
+            OTHER_USER,
+            bg,
+        )
+        await svc.change_lost_item_status(mine.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER)
+
+        result = await svc.list_my_lost_items(LostItemQuery(pageNo=1, pageSize=10), MOCK_USER)
+
+        assert result["total"] == 1
+        assert result["list"][0]["id"] == mine.id
+        assert result["list"][0]["status"] == "CLOSED"
+
+    async def test_admin_can_change_lost_status(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_lost_item(
+            CreateLostItemRequest(
+                itemName="Admin Close",
+                category="OTHER",
+                lostTimeStart="2026-04-27 10:00:00",
+                lostTimeEnd="2026-04-27 11:00:00",
+                lostLocation="Office",
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+
+        result = await svc.change_lost_item_status(
+            created.id, ChangeStatusRequest(status="CLOSED"), ADMIN_USER
+        )
+
+        assert result["status"] == "CLOSED"
+
+    async def test_admin_lost_list_uses_real_report_count(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_lost_item(
+            CreateLostItemRequest(
+                itemName="Reported Lost",
+                category="OTHER",
+                lostTimeStart="2026-04-28 10:00:00",
+                lostTimeEnd="2026-04-28 11:00:00",
+                lostLocation="Office",
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+        await svc.submit_report(
+            SubmitReportRequest(
+                targetType="LOST_ITEM",
+                targetId=created.id,
+                reason="SPAM",
+                description="bad listing",
+            ),
+            OTHER_USER,
+        )
+
+        items, _ = await svc.list_admin_items_internal("LOST", offset=0, limit=10)
+        item = next(i for i in items if i["id"] == created.id)
+
+        assert item["reportCount"] == 1
+
 
 class TestFoundItemService:
     async def test_create_found_item(self, session):
@@ -180,6 +320,222 @@ class TestFoundItemService:
             created.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER
         )
         assert result["status"] == "CLOSED"
+
+    async def test_found_detail_uses_real_active_claim_flag(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Headphones",
+                category="ELECTRONIC",
+                foundTime="2026-04-22 10:00:00",
+                foundLocation="Library",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+        session.add(
+            ClaimRequest(
+                id=generate_ulid(),
+                found_item_id=created.id,
+                claimant_id=OTHER_USER.id,
+                verify_level="BASIC",
+                review_status="PENDING",
+            )
+        )
+        await session.commit()
+
+        detail = await svc.get_found_item_detail(created.id, MOCK_USER)
+
+        assert detail["hasActiveClaim"] is True
+
+    async def test_list_my_found_items_only_returns_current_user_items(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        bg = BackgroundTasks()
+        mine = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="My Book",
+                category="BOOK",
+                foundTime="2026-04-23 10:00:00",
+                foundLocation="Library",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            MOCK_USER,
+            bg,
+        )
+        await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Other Book",
+                category="BOOK",
+                foundTime="2026-04-23 11:00:00",
+                foundLocation="Library",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            OTHER_USER,
+            bg,
+        )
+
+        result = await svc.list_my_found_items(FoundItemQuery(pageNo=1, pageSize=10), MOCK_USER)
+
+        assert result["total"] == 1
+        assert result["list"][0]["id"] == mine.id
+
+    async def test_found_claiming_can_be_closed_by_publisher(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Claiming Item",
+                category="OTHER",
+                foundTime="2026-04-24 10:00:00",
+                foundLocation="Gate",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+        await svc.update_found_status_internal(created.id, "CLAIMING")
+        await session.commit()
+
+        result = await svc.change_found_item_status(
+            created.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER
+        )
+
+        assert result["status"] == "CLOSED"
+
+    async def test_update_found_item_replaces_images_and_questions(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Old Bottle",
+                category="DAILY_USE",
+                foundTime="2026-04-25 10:00:00",
+                foundLocation="Old Gate",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+                imageUrls=["https://example.com/old.jpg"],
+                verifyQuestions=[
+                    VerifyQuestionInput(questionText="Old question?", answerKeywords=["old"])
+                ],
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+        await svc.change_found_item_status(
+            created.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER
+        )
+
+        result = await svc.update_found_item(
+            created.id,
+            UpdateFoundItemRequest(
+                itemName="New Bottle",
+                category="BOOK",
+                description="updated",
+                foundTime="2026-04-26 11:00:00",
+                foundLocation="New Gate",
+                custodyType="OFFICE",
+                contactPreference="PHONE",
+                imageUrls=["https://example.com/new.jpg"],
+                verifyQuestions=[
+                    VerifyQuestionInput(questionText="New question?", answerKeywords=["new"])
+                ],
+            ),
+            MOCK_USER,
+        )
+        detail = await svc.get_found_item_detail(created.id, MOCK_USER)
+
+        assert result == {"id": created.id, "status": "PENDING", "reviewStatus": "PENDING"}
+        assert detail["itemName"] == "New Bottle"
+        assert detail["category"] == "BOOK"
+        assert detail["description"] == "updated"
+        assert detail["foundLocation"] == "New Gate"
+        assert detail["custodyType"] == "OFFICE"
+        assert detail["contactPreference"] == "PHONE"
+        assert detail["imageUrls"] == ["https://example.com/new.jpg"]
+        assert [q["questionText"] for q in detail["verifyQuestions"]] == ["New question?"]
+
+    async def test_update_found_item_not_publisher(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Owner Item",
+                category="OTHER",
+                foundTime="2026-04-27 10:00:00",
+                foundLocation="Gate",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+
+        with pytest.raises(BizError) as exc_info:
+            await svc.update_found_item(
+                created.id,
+                UpdateFoundItemRequest(
+                    itemName="Bad Update",
+                    category="OTHER",
+                    foundTime="2026-04-27 11:00:00",
+                    foundLocation="Gate",
+                    custodyType="SELF",
+                    contactPreference="IN_APP",
+                ),
+                OTHER_USER,
+            )
+
+        assert exc_info.value.code == ErrorCode.NOT_PUBLISHER
+
+    async def test_submit_report_creates_report_and_prevents_duplicate(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        created = await svc.create_found_item(
+            CreateFoundItemRequest(
+                itemName="Reportable Item",
+                category="OTHER",
+                foundTime="2026-04-25 10:00:00",
+                foundLocation="Gate",
+                custodyType="SELF",
+                contactPreference="IN_APP",
+            ),
+            MOCK_USER,
+            BackgroundTasks(),
+        )
+
+        resp = await svc.submit_report(
+            SubmitReportRequest(
+                targetType="FOUND_ITEM",
+                targetId=created.id,
+                reason="SPAM",
+                description="bad listing",
+            ),
+            OTHER_USER,
+        )
+        result = await session.execute(select(Report).where(Report.id == resp.id))
+        report = result.scalar_one()
+
+        assert resp.handle_status == "PENDING"
+        assert report.reported_user_id == MOCK_USER.id
+
+        with pytest.raises(BizError) as exc_info:
+            await svc.submit_report(
+                SubmitReportRequest(targetType="FOUND_ITEM", targetId=created.id, reason="SPAM"),
+                OTHER_USER,
+            )
+        assert exc_info.value.code == ErrorCode.REPORT_DUPLICATE
 
     async def test_batch_create_found_items_partial_failure(self, session):
         from fastapi import BackgroundTasks

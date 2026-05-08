@@ -10,12 +10,10 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '@/api/notification';
-import { ApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import { useNotificationStore } from '@/stores/notification';
-import {
-  type NotificationSummary,
-  noticeTypeLabels,
-} from '@xunji/shared';
+import type { NotificationSummary } from '@xunji/shared';
+import { noticeTypeLabels } from '@xunji/shared';
 import { relativeTime } from '@/utils/format';
 
 const router = useRouter();
@@ -34,7 +32,7 @@ async function load() {
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     list.value = [];
   } finally {
     loading.value = false;

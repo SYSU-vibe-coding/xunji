@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 
 import StatusTag from '@/components/StatusTag.vue';
 import { listCertifications, reviewCertification } from '@/api/admin';
-import { ApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import {
   type CertificationReview,
   type ReviewStatus,
@@ -33,7 +33,7 @@ async function load() {
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     list.value = [];
     total.value = 0;
   } finally {

@@ -7,7 +7,7 @@ import EmptyState from '@/components/EmptyState.vue';
 import ItemCard from '@/components/ItemCard.vue';
 import { listFoundItems } from '@/api/item';
 import { listNotifications } from '@/api/notification';
-import { ApiError } from '@/api/http';
+import { isAuthApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notification';
 import type { FoundItemSummary, NotificationSummary } from '@xunji/shared';
@@ -38,7 +38,7 @@ async function load() {
     recentFound.value = foundPage.list;
     recentNotifications.value = notiPage.list;
   } catch (err) {
-    if (!(err instanceof ApiError) || err.code !== 40002) {
+    if (!isAuthApiError(err)) {
       // 静默：登录失效会被守卫接管
     }
   } finally {

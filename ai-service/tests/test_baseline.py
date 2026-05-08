@@ -49,6 +49,30 @@ def test_calculate_match_score() -> None:
     assert resp.location_score == 100
 
 
+def test_calculate_match_uses_backend_fallback_scores() -> None:
+    resp = _baseline.calculate_match(
+        CalculateMatchRequest(
+            lostItem=MatchItem(
+                name="black umbrella",
+                location="library",
+                time="2026-04-30T08:00:00",
+                imageUrls=["https://example.com/lost.jpg"],
+            ),
+            foundItem=MatchItem(
+                name="black umbrella",
+                location="library",
+                time="2026-04-30T09:00:00",
+                imageUrls=["https://example.com/found.jpg"],
+            ),
+        )
+    )
+    assert resp.image_score == 30.0
+    assert resp.text_score == 100.0
+    assert resp.location_score == 100.0
+    assert resp.time_score == 98.0
+    assert resp.total_score == 71.8
+
+
 def test_time_score_decays_with_hours() -> None:
     near = _baseline.time_score_value("2026-04-30T08:00:00", "2026-04-30T09:00:00")
     far = _baseline.time_score_value("2026-04-30T08:00:00", "2026-05-03T08:00:00")

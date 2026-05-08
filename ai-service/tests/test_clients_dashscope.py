@@ -5,6 +5,7 @@ import json
 import httpx
 import pytest
 from app.clients.dashscope import DashScopeClient
+from app.core.config import settings
 
 
 def _embedding_response(vectors: list[list[float]]) -> httpx.Response:
@@ -33,6 +34,10 @@ async def test_disabled_when_no_api_key() -> None:
         assert await client.vl_understand("http://x", "p") is None
     finally:
         await client.aclose()
+
+
+def test_default_timeout_stays_within_backend_ai_budget() -> None:
+    assert settings.DASHSCOPE_TIMEOUT < 3.0
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 Falls back to keyword baseline (`_baseline.calculate_match`) on any failure.
 Image similarity intentionally skipped in DashScope path: enabling it would
 require multimodal-embedding which charges per call and isn't always
-available in the user's region. The rule-based image score (0/60) is kept.
+available in the user's region. The rule-based image score is kept.
 """
 
 from __future__ import annotations
@@ -30,9 +30,9 @@ async def calculate_match(
     if vectors is None or len(vectors) != 2:
         return _baseline.calculate_match(req)
 
-    text_score = max(0.0, _cosine(vectors[0], vectors[1])) * 100.0
+    text_score = min(100.0, max(0.0, _cosine(vectors[0], vectors[1])) * 100.0)
 
-    image_score = 60.0 if req.lost_item.image_urls and req.found_item.image_urls else 0.0
+    image_score = _baseline.image_score_value(req.lost_item.image_urls, req.found_item.image_urls)
     location_score = _baseline.location_score_value(req.lost_item.location, req.found_item.location)
     time_score = _baseline.time_score_value(req.lost_item.time, req.found_item.time)
     total = image_score * 0.4 + text_score * 0.3 + location_score * 0.2 + time_score * 0.1

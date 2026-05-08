@@ -6,10 +6,12 @@ import { Search } from '@element-plus/icons-vue';
 import EmptyState from '@/components/EmptyState.vue';
 import ItemCard from '@/components/ItemCard.vue';
 import { listFoundItems, listLostItems } from '@/api/item';
-import { ApiError } from '@/api/http';
+import { isAuthApiError } from '@/api/http';
 import type {
+  FoundItemQuery,
   FoundItemSummary,
   ItemCategory,
+  LostItemQuery,
   LostItemSummary,
 } from '@xunji/shared';
 import { categoryOptions } from '@xunji/shared';
@@ -28,23 +30,23 @@ const pageSize = 12;
 async function load() {
   loading.value = true;
   try {
-    const params = {
+    const params: FoundItemQuery & LostItemQuery = {
       pageNo: page.value,
       pageSize,
       keyword: keyword.value || undefined,
       category: category.value || undefined,
     };
     if (mode.value === 'FOUND') {
-      const data = await listFoundItems(params as any);
+      const data = await listFoundItems(params);
       foundList.value = data.list;
       total.value = data.total;
     } else {
-      const data = await listLostItems(params as any);
+      const data = await listLostItems(params);
       lostList.value = data.list;
       total.value = data.total;
     }
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     foundList.value = [];
     lostList.value = [];
     total.value = 0;

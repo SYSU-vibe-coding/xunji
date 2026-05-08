@@ -5,6 +5,7 @@ import type {
   ClaimReviewStatus,
   FoundItemStatus,
   LostItemStatus,
+  MatchStatus,
   ReviewStatus,
 } from '@xunji/shared';
 import {
@@ -12,10 +13,11 @@ import {
   claimStatusLabels,
   foundStatusLabels,
   lostStatusLabels,
+  matchStatusLabels,
   reviewStatusLabels,
 } from '@xunji/shared';
 
-type StatusVariant = 'lost' | 'found' | 'claim' | 'review' | 'cert';
+type StatusVariant = 'lost' | 'found' | 'claim' | 'review' | 'cert' | 'match';
 
 const props = withDefaults(
   defineProps<{
@@ -32,6 +34,7 @@ const labelMap: Record<StatusVariant, Record<string, string>> = {
   claim: claimStatusLabels as Record<ClaimReviewStatus, string>,
   review: reviewStatusLabels as Record<ReviewStatus, string>,
   cert: certStatusLabels as Record<CertStatus, string>,
+  match: matchStatusLabels as Record<MatchStatus, string>,
 };
 
 const TONE: Record<StatusVariant, Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'info'>> = {
@@ -48,6 +51,7 @@ const TONE: Record<StatusVariant, Record<string, 'primary' | 'success' | 'warnin
   },
   review: { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger' },
   cert: { UNVERIFIED: 'info', PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger' },
+  match: { NEW: 'primary', READ: 'info', CLAIMED: 'success', EXPIRED: 'info' },
 };
 
 const text = computed(() => labelMap[props.variant]?.[props.value] ?? props.value);

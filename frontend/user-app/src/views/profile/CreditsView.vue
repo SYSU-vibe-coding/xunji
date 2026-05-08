@@ -5,12 +5,10 @@ import { Trophy } from '@element-plus/icons-vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { listMyCreditLogs } from '@/api/credit';
-import { ApiError } from '@/api/http';
+import { isAuthApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
-import {
-  type CreditLogItem,
-  creditReasonLabels,
-} from '@xunji/shared';
+import type { CreditLogItem } from '@xunji/shared';
+import { creditReasonLabels } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
 
 const auth = useAuthStore();
@@ -27,7 +25,7 @@ async function load() {
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     list.value = [];
   } finally {
     loading.value = false;

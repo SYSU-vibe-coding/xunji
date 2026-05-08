@@ -1,0 +1,90 @@
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
+
+VALID_MATCH_BIZ_TYPES = {"LOST", "FOUND"}
+VALID_MATCH_STATUSES = {"NEW", "READ", "CLAIMED", "EXPIRED"}
+
+
+def normalize_biz_type(value: str) -> str:
+    normalized = value.upper()
+    if normalized not in VALID_MATCH_BIZ_TYPES:
+        msg = "bizType must be LOST or FOUND"
+        raise ValueError(msg)
+    return normalized
+
+
+class MatchListQuery(BaseModel):
+    biz_type: str = Field(..., alias="bizType")
+    biz_id: str = Field(..., alias="bizId")
+    page_no: int = Field(default=1, ge=1, alias="pageNo")
+    page_size: int = Field(default=10, ge=1, le=50, alias="pageSize")
+    min_score: float = Field(default=70, ge=0, le=100, alias="minScore")
+    status: str | None = None
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    @field_validator("biz_type")
+    @classmethod
+    def validate_biz_type(cls, value: str) -> str:
+        return normalize_biz_type(value)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.upper()
+        if normalized not in VALID_MATCH_STATUSES:
+            msg = f"status must be one of {VALID_MATCH_STATUSES}"
+            raise ValueError(msg)
+        return normalized
+
+
+class MatchRecalculateRequest(BaseModel):
+    biz_type: str = Field(..., alias="bizType")
+    biz_id: str = Field(..., alias="bizId")
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    @field_validator("biz_type")
+    @classmethod
+    def validate_biz_type(cls, value: str) -> str:
+        return normalize_biz_type(value)
+
+
+class MatchCounterpartSummary(BaseModel):
+    id: str
+    item_name: str
+    category: str
+    cover_image_url: str | None = None
+    location: str
+    time: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class MatchListItem(BaseModel):
+    match_id: str
+    lost_item_id: str
+    found_item_id: str
+    image_score: float
+    text_score: float
+    location_score: float
+    time_score: float
+    total_score: float
+    match_status: str
+    counterpart: MatchCounterpartSummary
+    created_at: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class MatchDetailResponse(MatchListItem):
+    lost_item: dict[str, Any]
+    found_item: dict[str, Any]
+    can_claim: bool
+
+
+class MatchRecalculateResponse(BaseModel):
+    task_id: str
+    estimated_count: int
+    status: str = "COMPLETED"
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

@@ -16,13 +16,26 @@ from typing import Any
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.claim.repository import ClaimRequestRepository
+from app.common.errors import BizError, ErrorCode
+from app.common.pagination import PaginationParams, paginate
+from app.common.utils import format_beijing
 from app.core.ai_client import AIClient
 from app.db.session import async_session_factory
 from app.db.ulid import generate_ulid
 from app.item.service import ItemService
 from app.match.models import MatchResult
 from app.match.repository import MatchResultRepository
+from app.match.schemas import (
+    MatchCounterpartSummary,
+    MatchDetailResponse,
+    MatchListItem,
+    MatchListQuery,
+    MatchRecalculateRequest,
+    MatchRecalculateResponse,
+)
 from app.match.scoring import rule_based_score
+from app.user.schemas import CurrentUser
 
 # Score thresholds documented in matching-rules.md §3
 MATCH_THRESHOLD = 70.0
@@ -32,8 +45,12 @@ MAX_CONCURRENCY = 8
 
 
 class MatchService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, ai_client: AIClient | None = None) -> None:
+        self._session = session
         self._repo = MatchResultRepository(session)
+        self._item_svc = ItemService(session)
+        self._claim_repo = ClaimRequestRepository(session)
+        self._ai_client = ai_client
 
     async def get_by_id(self, match_id: str) -> MatchResult | None:
         return await self._repo.get_by_id(match_id)
@@ -41,6 +58,135 @@ class MatchService:
     async def mark_claimed(self, match: MatchResult) -> None:
         match.match_status = "CLAIMED"
         await self._repo.update(match)
+
+    async def list_matches(
+        self, query: MatchListQuery, current_user: CurrentUser
+    ) -> dict[str, Any]:
+        await self._ensure_biz_owner(query.biz_type, query.biz_id, current_user)
+        params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
+        matches, total = await self._repo.list_by_biz(
+            biz_type=query.biz_type,
+            biz_id=query.biz_id,
+            min_score=Decimal(str(query.min_score)),
+            status=query.status,
+            offset=params.offset,
+            limit=query.page_size,
+        )
+        items = [
+            (
+                await self._to_list_item(
+                    match=match,
+                    current_user=current_user,
+                    source_biz_type=query.biz_type,
+                )
+            ).model_dump(by_alias=True)
+            for match in matches
+        ]
+        return paginate(items, total, params)
+
+    async def get_match_detail(
+        self, match_id: str, current_user: CurrentUser
+    ) -> MatchDetailResponse:
+        match = await self._get_match_or_raise(match_id)
+        lost_item = await self._item_svc.get_lost_item_internal(match.lost_item_id)
+        found_item = await self._item_svc.get_found_item_internal(match.found_item_id)
+        if current_user.id not in {lost_item.user_id, found_item.user_id}:
+            raise BizError(ErrorCode.FORBIDDEN)
+
+        lost_detail = await self._item_svc.get_lost_item_detail(match.lost_item_id, current_user)
+        found_detail = await self._item_svc.get_found_item_detail(match.found_item_id, current_user)
+        can_claim = (
+            current_user.id == lost_item.user_id
+            and found_item.user_id != current_user.id
+            and found_item.status == "PENDING"
+            and match.match_status not in {"CLAIMED", "EXPIRED"}
+            and not await self._claim_repo.has_active_claim(found_item.id)
+        )
+        list_item = await self._to_list_item(
+            match=match,
+            current_user=current_user,
+            source_biz_type="LOST" if current_user.id == lost_item.user_id else "FOUND",
+        )
+        return MatchDetailResponse(
+            **list_item.model_dump(),
+            lost_item=lost_detail,
+            found_item=found_detail,
+            can_claim=can_claim,
+        )
+
+    async def recalculate(
+        self, req: MatchRecalculateRequest, current_user: CurrentUser
+    ) -> MatchRecalculateResponse:
+        await self._ensure_biz_owner(req.biz_type, req.biz_id, current_user, allow_admin=True)
+        written = await trigger_match(req.biz_type, req.biz_id, ai_client=self._ai_client)
+        return MatchRecalculateResponse(task_id=generate_ulid(), estimated_count=written)
+
+    async def _get_match_or_raise(self, match_id: str) -> MatchResult:
+        match = await self._repo.get_by_id(match_id)
+        if match is None:
+            raise BizError(ErrorCode.MATCH_NOT_FOUND)
+        return match
+
+    async def _ensure_biz_owner(
+        self,
+        biz_type: str,
+        biz_id: str,
+        current_user: CurrentUser,
+        *,
+        allow_admin: bool = False,
+    ) -> None:
+        if biz_type == "LOST":
+            owner_id = (await self._item_svc.get_lost_item_internal(biz_id)).user_id
+        else:
+            owner_id = (await self._item_svc.get_found_item_internal(biz_id)).user_id
+        if owner_id != current_user.id and not (allow_admin and current_user.role == "ADMIN"):
+            raise BizError(ErrorCode.FORBIDDEN)
+
+    async def _to_list_item(
+        self,
+        *,
+        match: MatchResult,
+        current_user: CurrentUser,
+        source_biz_type: str,
+    ) -> MatchListItem:
+        counterpart = await self._counterpart_summary(match, current_user, source_biz_type)
+        return MatchListItem(
+            match_id=match.id,
+            lost_item_id=match.lost_item_id,
+            found_item_id=match.found_item_id,
+            image_score=float(match.image_score),
+            text_score=float(match.text_score),
+            location_score=float(match.location_score),
+            time_score=float(match.time_score),
+            total_score=float(match.total_score),
+            match_status=match.match_status,
+            counterpart=counterpart,
+            created_at=format_beijing(match.created_at),
+        )
+
+    async def _counterpart_summary(
+        self, match: MatchResult, current_user: CurrentUser, source_biz_type: str
+    ) -> MatchCounterpartSummary:
+        if source_biz_type == "LOST":
+            detail = await self._item_svc.get_found_item_detail(match.found_item_id, current_user)
+            image_urls = detail.get("imageUrls", [])
+            return MatchCounterpartSummary(
+                id=detail["id"],
+                item_name=detail["itemName"],
+                category=detail["category"],
+                cover_image_url=image_urls[0] if image_urls else None,
+                location=detail["foundLocation"],
+                time=detail["foundTime"],
+            )
+        detail = await self._item_svc.get_lost_item_detail(match.lost_item_id, current_user)
+        return MatchCounterpartSummary(
+            id=detail["id"],
+            item_name=detail["itemName"],
+            category=detail["category"],
+            cover_image_url=detail.get("coverImageUrl"),
+            location=detail["lostLocation"],
+            time=detail["lostTimeStart"],
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,199 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend · lint & type & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy app
+
+      - name: Pytest
+        run: uv run pytest --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore
+
+  ai-service:
+    name: AI service · lint & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if empty
+        id: check
+        run: |
+          if [ ! -f pyproject.toml ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install uv
+        if: steps.check.outputs.skip != 'true'
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai-service/uv.lock
+
+      - name: Sync
+        if: steps.check.outputs.skip != 'true'
+        run: uv sync --all-extras --dev
+
+      - name: Ruff
+        if: steps.check.outputs.skip != 'true'
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        if: steps.check.outputs.skip != 'true'
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        if: steps.check.outputs.skip != 'true'
+        run: uv run mypy app
+
+      - name: Pytest
+        if: steps.check.outputs.skip != 'true'
+        run: uv run pytest
+
+  frontend-user:
+    name: Frontend user-app · lint & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/user-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if empty
+        id: check
+        run: |
+          if [ ! -f package.json ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/user-app/pnpm-lock.yaml
+
+      - name: Install
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm lint
+
+      - name: Unit tests
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm test:unit --run
+
+      - name: Build
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm build
+
+  frontend-admin:
+    name: Frontend admin-web · lint & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/admin-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if empty
+        id: check
+        run: |
+          if [ ! -f package.json ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/admin-web/pnpm-lock.yaml
+
+      - name: Install
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm lint
+
+      - name: Unit tests
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm test:unit --run
+
+      - name: Build
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm build
+
+  docker-build:
+    name: Docker build smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose config smoke
+        run: docker compose -f deploy/docker/docker-compose.yml config --quiet
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t xunji/backend:ci .
+
+      - name: Build AI service image
+        run: docker build -f ai-service/Dockerfile -t xunji/ai-service:ci .

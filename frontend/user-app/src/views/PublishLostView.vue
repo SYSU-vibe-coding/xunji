@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
+import { ElMessage, type FormInstance, type FormItemRule, type FormRules } from 'element-plus';
 
 import ImageUploader from '@/components/ImageUploader.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -32,8 +32,8 @@ const rules: FormRules = {
   lostRange: [
     {
       required: true,
-      validator: (_rule, value: unknown[]) => {
-        if (!value || value.length !== 2) return Promise.reject('请选择丢失时间区间');
+      validator: (_rule: FormItemRule, value: unknown) => {
+        if (!Array.isArray(value) || value.length !== 2) return Promise.reject('请选择丢失时间区间');
         return Promise.resolve();
       },
     },

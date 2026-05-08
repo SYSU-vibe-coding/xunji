@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
+import {
+  ElMessage,
+  ElMessageBox,
+  type FormInstance,
+  type FormItemRule,
+  type FormRules,
+} from 'element-plus';
 
 import EmptyState from '@/components/EmptyState.vue';
 import ImageUploader from '@/components/ImageUploader.vue';
@@ -9,20 +15,25 @@ import ItemCard from '@/components/ItemCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import {
-  deleteLostItem,
+  changeFoundItemStatus,
+  changeLostItemStatus,
   getFoundItem,
   getLostItem,
-  listFoundItems,
-  listLostItems,
+  listMyFoundItems,
+  listMyLostItems,
+  updateFoundItem,
   updateLostItem,
 } from '@/api/item';
-import { ApiError } from '@/api/http';
-import { useAuthStore } from '@/stores/auth';
+import { ApiError, isAuthApiError } from '@/api/http';
 import {
   categoryLabels,
   categoryOptions,
+  contactOptions,
   contactPreferenceLabels,
+  custodyOptions,
   custodyTypeLabels,
+  type ContactPreference,
+  type CustodyType,
   type FoundItemDetail,
   type FoundItemSummary,
   type ItemCategory,
@@ -32,65 +43,57 @@ import {
 import { shortDateTime, toBackendDateTime } from '@/utils/format';
 
 const router = useRouter();
-const auth = useAuthStore();
 
 const tab = ref<'lost' | 'found'>('lost');
 const lostList = ref<LostItemSummary[]>([]);
 const foundList = ref<FoundItemSummary[]>([]);
 const loading = ref(true);
+const visibleList = computed(() => (tab.value === 'lost' ? lostList.value : foundList.value));
 
 async function load() {
   loading.value = true;
-  if (!auth.profile) await auth.loadProfile().catch(() => {});
   try {
     const [lostPage, foundPage] = await Promise.all([
-      listLostItems({ pageSize: 50, includeClosed: true }),
-      listFoundItems({ pageSize: 50, includeClosed: true }),
+      listMyLostItems({ pageSize: 50, includeClosed: true }),
+      listMyFoundItems({ pageSize: 50, includeClosed: true }),
     ]);
-    const myId = auth.profile?.id ?? '';
-    lostList.value = lostPage.list.filter((it) => it.userId === myId);
-    foundList.value = foundPage.list.filter((it) => it.userId === myId);
+    lostList.value = lostPage.list;
+    foundList.value = foundPage.list;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     lostList.value = [];
     foundList.value = [];
+    ElMessage.error(err instanceof ApiError ? err.message : '加载我的发布失败');
   } finally {
     loading.value = false;
   }
 }
 
-const visibleList = computed(() => (tab.value === 'lost' ? lostList.value : foundList.value));
-
-watch(tab, () => {
-  /* tab 切换不重新拉取，只过滤已加载的数据 */
-});
-
 onMounted(load);
 
-// 响应式弹窗宽度：手机视口铺满，平板/桌面用固定宽
 const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024);
 function onResize() {
   viewportWidth.value = window.innerWidth;
 }
 onMounted(() => window.addEventListener('resize', onResize));
 onUnmounted(() => window.removeEventListener('resize', onResize));
-const dialogWidth = computed(() => (viewportWidth.value < 720 ? '94vw' : '640px'));
+const dialogWidth = computed(() => (viewportWidth.value < 720 ? '94vw' : '680px'));
 const isMobile = computed(() => viewportWidth.value < 720);
-
-// ---------- 弹窗 ----------
 
 const dialogVisible = ref(false);
 const dialogLoading = ref(false);
 const dialogKind = ref<'lost' | 'found'>('lost');
 const lostDetail = ref<LostItemDetail | null>(null);
 const foundDetail = ref<FoundItemDetail | null>(null);
-
 const editing = ref(false);
 const saving = ref(false);
-const deleting = ref(false);
+const changingStatus = ref(false);
 const formRef = ref<FormInstance>();
+const canCloseFound = computed(
+  () => foundDetail.value?.status === 'PENDING' || foundDetail.value?.status === 'CLAIMING',
+);
 
-const editForm = reactive({
+const lostForm = reactive({
   itemName: '',
   category: 'ELECTRONIC' as ItemCategory,
   lostRange: [] as Date[],
@@ -100,17 +103,33 @@ const editForm = reactive({
   imageUrls: [] as string[],
 });
 
-const rules: FormRules = {
+const foundForm = reactive({
+  itemName: '',
+  category: 'CERT' as ItemCategory,
+  foundTime: null as Date | null,
+  foundLocation: '',
+  custodyType: 'SECURITY' as CustodyType,
+  contactPreference: 'IN_APP' as ContactPreference,
+  description: '',
+  imageUrls: [] as string[],
+});
+
+const commonRules: FormRules = {
   itemName: [
     { required: true, message: '请输入物品名称' },
     { min: 1, max: 100, message: '物品名称 1-100 字' },
   ],
   category: [{ required: true, message: '请选择物品类别' }],
+  description: [{ max: 500, message: '描述不超过 500 字' }],
+};
+
+const lostRules: FormRules = {
+  ...commonRules,
   lostRange: [
     {
       required: true,
-      validator: (_rule, value: unknown[]) => {
-        if (!value || value.length !== 2) return Promise.reject('请选择丢失时间区间');
+      validator: (_rule: FormItemRule, value: unknown) => {
+        if (!Array.isArray(value) || value.length !== 2) return Promise.reject('请选择丢失时间区间');
         return Promise.resolve();
       },
     },
@@ -119,17 +138,38 @@ const rules: FormRules = {
     { required: true, message: '请输入丢失地点' },
     { max: 100, message: '地点不超过 100 字' },
   ],
-  description: [{ max: 500, message: '描述不超过 500 字' }],
 };
 
-function resetEditForm(detail: LostItemDetail) {
-  editForm.itemName = detail.itemName;
-  editForm.category = detail.category;
-  editForm.lostRange = [new Date(detail.lostTimeStart), new Date(detail.lostTimeEnd)];
-  editForm.lostLocation = detail.lostLocation;
-  editForm.description = detail.description ?? '';
-  editForm.subscribeMatch = detail.subscribeMatch;
-  editForm.imageUrls = [...detail.imageUrls];
+const foundRules: FormRules = {
+  ...commonRules,
+  foundTime: [{ required: true, message: '请选择拾获时间' }],
+  foundLocation: [
+    { required: true, message: '请输入拾获地点' },
+    { max: 100, message: '地点不超过 100 字' },
+  ],
+  custodyType: [{ required: true, message: '请选择保管方式' }],
+  contactPreference: [{ required: true, message: '请选择联系方式偏好' }],
+};
+
+function resetLostForm(detail: LostItemDetail) {
+  lostForm.itemName = detail.itemName;
+  lostForm.category = detail.category;
+  lostForm.lostRange = [new Date(detail.lostTimeStart), new Date(detail.lostTimeEnd)];
+  lostForm.lostLocation = detail.lostLocation;
+  lostForm.description = detail.description ?? '';
+  lostForm.subscribeMatch = detail.subscribeMatch;
+  lostForm.imageUrls = [...detail.imageUrls];
+}
+
+function resetFoundForm(detail: FoundItemDetail) {
+  foundForm.itemName = detail.itemName;
+  foundForm.category = detail.category;
+  foundForm.foundTime = new Date(detail.foundTime);
+  foundForm.foundLocation = detail.foundLocation;
+  foundForm.custodyType = detail.custodyType;
+  foundForm.contactPreference = detail.contactPreference;
+  foundForm.description = detail.description ?? '';
+  foundForm.imageUrls = [...detail.imageUrls];
 }
 
 async function openCard(id: string, kind: 'lost' | 'found') {
@@ -143,12 +183,14 @@ async function openCard(id: string, kind: 'lost' | 'found') {
     if (kind === 'lost') {
       const detail = await getLostItem(id);
       lostDetail.value = detail;
-      resetEditForm(detail);
+      resetLostForm(detail);
     } else {
-      foundDetail.value = await getFoundItem(id);
+      const detail = await getFoundItem(id);
+      foundDetail.value = detail;
+      resetFoundForm(detail);
     }
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '加载失败');
+    ElMessage.error(err instanceof ApiError ? err.message : '加载详情失败');
     dialogVisible.value = false;
   } finally {
     dialogLoading.value = false;
@@ -156,34 +198,54 @@ async function openCard(id: string, kind: 'lost' | 'found') {
 }
 
 function startEdit() {
-  if (!lostDetail.value) return;
-  resetEditForm(lostDetail.value);
+  if (dialogKind.value === 'lost' && lostDetail.value) resetLostForm(lostDetail.value);
+  if (dialogKind.value === 'found' && foundDetail.value) resetFoundForm(foundDetail.value);
   editing.value = true;
 }
 
 function cancelEdit() {
-  if (lostDetail.value) resetEditForm(lostDetail.value);
+  if (dialogKind.value === 'lost' && lostDetail.value) resetLostForm(lostDetail.value);
+  if (dialogKind.value === 'found' && foundDetail.value) resetFoundForm(foundDetail.value);
   editing.value = false;
 }
 
 async function saveEdit() {
-  if (!lostDetail.value) return;
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
   saving.value = true;
   try {
-    const updated = await updateLostItem(lostDetail.value.id, {
-      itemName: editForm.itemName,
-      category: editForm.category,
-      description: editForm.description || null,
-      lostTimeStart: toBackendDateTime(editForm.lostRange[0]),
-      lostTimeEnd: toBackendDateTime(editForm.lostRange[1]),
-      lostLocation: editForm.lostLocation,
-      subscribeMatch: editForm.subscribeMatch,
-      imageUrls: editForm.imageUrls,
-    });
-    lostDetail.value = updated;
-    resetEditForm(updated);
+    if (dialogKind.value === 'lost' && lostDetail.value) {
+      const id = lostDetail.value.id;
+      await updateLostItem(id, {
+        itemName: lostForm.itemName,
+        category: lostForm.category,
+        description: lostForm.description || null,
+        lostTimeStart: toBackendDateTime(lostForm.lostRange[0]),
+        lostTimeEnd: toBackendDateTime(lostForm.lostRange[1]),
+        lostLocation: lostForm.lostLocation,
+        subscribeMatch: lostForm.subscribeMatch,
+        imageUrls: lostForm.imageUrls,
+      });
+      const updated = await getLostItem(id);
+      lostDetail.value = updated;
+      resetLostForm(updated);
+    }
+    if (dialogKind.value === 'found' && foundDetail.value) {
+      const id = foundDetail.value.id;
+      await updateFoundItem(id, {
+        itemName: foundForm.itemName,
+        category: foundForm.category,
+        description: foundForm.description || null,
+        foundTime: toBackendDateTime(foundForm.foundTime),
+        foundLocation: foundForm.foundLocation,
+        custodyType: foundForm.custodyType,
+        contactPreference: foundForm.contactPreference,
+        imageUrls: foundForm.imageUrls,
+      });
+      const updated = await getFoundItem(id);
+      foundDetail.value = updated;
+      resetFoundForm(updated);
+    }
     editing.value = false;
     ElMessage.success('已保存');
     await load();
@@ -194,28 +256,43 @@ async function saveEdit() {
   }
 }
 
-async function handleDelete() {
-  if (!lostDetail.value) return;
+async function updateStatus(status: 'FOUND' | 'CLOSED') {
+  const isLost = dialogKind.value === 'lost';
+  const id = isLost ? lostDetail.value?.id : foundDetail.value?.id;
+  if (!id) return;
+  const label = status === 'FOUND' ? '标记已找回' : '关闭';
   try {
-    await ElMessageBox.confirm(
-      `确认删除「${lostDetail.value.itemName}」？此操作不可恢复。`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
-    );
+    await ElMessageBox.confirm(`确认${label}这条发布吗？`, label, { type: 'warning' });
   } catch {
     return;
   }
-  deleting.value = true;
+  changingStatus.value = true;
   try {
-    await deleteLostItem(lostDetail.value.id);
-    ElMessage.success('已删除');
-    dialogVisible.value = false;
+    if (isLost) {
+      await changeLostItemStatus(id, { status });
+      lostDetail.value = await getLostItem(id);
+      resetLostForm(lostDetail.value);
+    } else {
+      await changeFoundItemStatus(id, { status: 'CLOSED' });
+      foundDetail.value = await getFoundItem(id);
+      resetFoundForm(foundDetail.value);
+    }
+    ElMessage.success('状态已更新');
     await load();
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '删除失败');
+    ElMessage.error(err instanceof ApiError ? err.message : '状态更新失败');
   } finally {
-    deleting.value = false;
+    changingStatus.value = false;
   }
+}
+
+function goMatches() {
+  const detail = dialogKind.value === 'lost' ? lostDetail.value : foundDetail.value;
+  if (!detail) return;
+  void router.push({
+    name: 'matches',
+    query: { bizType: dialogKind.value === 'lost' ? 'LOST' : 'FOUND', bizId: detail.id },
+  });
 }
 
 const detailImages = computed(() => {
@@ -229,7 +306,7 @@ const detailImages = computed(() => {
     <PageHeader
       eyebrow="My posts"
       title="我的发布"
-      description="点击卡片查看详情，失物可在弹窗内编辑或删除"
+      description="管理失物和招领记录，查看匹配结果，完成关闭或找回状态流转。"
       back-fallback="/profile"
     />
 
@@ -257,7 +334,6 @@ const detailImages = computed(() => {
       />
     </template>
 
-    <!-- 详情 / 编辑弹窗 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogKind === 'lost' ? '失物详情' : '招领详情'"
@@ -269,9 +345,7 @@ const detailImages = computed(() => {
     >
       <el-skeleton v-if="dialogLoading" :rows="6" animated />
 
-      <!-- ===== 失物 ===== -->
       <template v-else-if="dialogKind === 'lost' && lostDetail">
-        <!-- 查看模式 -->
         <div v-if="!editing" class="detail">
           <div class="badges">
             <el-tag round effect="dark">{{ categoryLabels[lostDetail.category] }}</el-tag>
@@ -279,48 +353,32 @@ const detailImages = computed(() => {
           </div>
           <h3 class="title">{{ lostDetail.itemName }}</h3>
           <p class="desc">{{ lostDetail.description || '发布者未填写描述' }}</p>
-
           <div v-if="detailImages.length" class="thumbs">
             <img v-for="img in detailImages" :key="img" :src="img" :alt="lostDetail.itemName" />
           </div>
-
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="丢失时间">
               {{ shortDateTime(lostDetail.lostTimeStart) }} ~ {{ shortDateTime(lostDetail.lostTimeEnd) }}
             </el-descriptions-item>
             <el-descriptions-item label="丢失地点">{{ lostDetail.lostLocation }}</el-descriptions-item>
-            <el-descriptions-item label="订阅匹配">
-              {{ lostDetail.subscribeMatch ? '已订阅' : '未订阅' }}
-            </el-descriptions-item>
+            <el-descriptions-item label="订阅匹配">{{ lostDetail.subscribeMatch ? '已订阅' : '未订阅' }}</el-descriptions-item>
             <el-descriptions-item label="匹配数">{{ lostDetail.matchCount ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="发布时间">{{ shortDateTime(lostDetail.createdAt) }}</el-descriptions-item>
           </el-descriptions>
         </div>
 
-        <!-- 编辑模式 -->
-        <el-form
-          v-else
-          ref="formRef"
-          :model="editForm"
-          :rules="rules"
-          label-position="top"
-        >
+        <el-form v-else ref="formRef" :model="lostForm" :rules="lostRules" label-position="top">
           <el-form-item label="物品名称" prop="itemName">
-            <el-input v-model="editForm.itemName" maxlength="100" />
+            <el-input v-model="lostForm.itemName" maxlength="100" />
           </el-form-item>
           <el-form-item label="物品类别" prop="category">
-            <el-select v-model="editForm.category" style="width: 100%">
-              <el-option
-                v-for="opt in categoryOptions"
-                :key="opt.value"
-                :label="opt.label"
-                :value="opt.value"
-              />
+            <el-select v-model="lostForm.category" style="width: 100%">
+              <el-option v-for="opt in categoryOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="丢失时间区间" prop="lostRange">
             <el-date-picker
-              v-model="editForm.lostRange"
+              v-model="lostForm.lostRange"
               type="datetimerange"
               range-separator="至"
               start-placeholder="开始时间"
@@ -330,48 +388,32 @@ const detailImages = computed(() => {
             />
           </el-form-item>
           <el-form-item label="丢失地点" prop="lostLocation">
-            <el-input v-model="editForm.lostLocation" maxlength="100" />
+            <el-input v-model="lostForm.lostLocation" maxlength="100" />
           </el-form-item>
           <el-form-item label="物品描述" prop="description">
-            <el-input
-              v-model="editForm.description"
-              type="textarea"
-              :rows="4"
-              maxlength="500"
-              show-word-limit
-            />
+            <el-input v-model="lostForm.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
           </el-form-item>
-          <el-form-item label="物品图片（最多 5 张）">
-            <ImageUploader v-model="editForm.imageUrls" biz-type="LOST" :max="5" />
+          <el-form-item label="物品图片">
+            <ImageUploader v-model="lostForm.imageUrls" biz-type="LOST" :max="5" />
           </el-form-item>
           <el-form-item>
-            <el-checkbox v-model="editForm.subscribeMatch">
-              订阅匹配提醒，发现相似招领自动通知
-            </el-checkbox>
+            <el-checkbox v-model="lostForm.subscribeMatch">订阅匹配提醒</el-checkbox>
           </el-form-item>
         </el-form>
       </template>
 
-      <!-- ===== 招领（只读） ===== -->
       <template v-else-if="dialogKind === 'found' && foundDetail">
-        <div class="detail">
+        <div v-if="!editing" class="detail">
           <div class="badges">
             <el-tag round effect="dark">{{ categoryLabels[foundDetail.category] }}</el-tag>
             <StatusTag variant="found" :value="foundDetail.status" />
           </div>
           <h3 class="title">{{ foundDetail.itemName }}</h3>
           <p class="desc">{{ foundDetail.description || '发布者未填写描述' }}</p>
-
           <div v-if="!foundDetail.isSensitive && detailImages.length" class="thumbs">
             <img v-for="img in detailImages" :key="img" :src="img" :alt="foundDetail.itemName" />
           </div>
-          <el-alert
-            v-else-if="foundDetail.isSensitive"
-            type="warning"
-            :closable="false"
-            title="敏感物品，原图仅完成实名认证的失主可见"
-          />
-
+          <el-alert v-else-if="foundDetail.isSensitive" type="warning" :closable="false" title="敏感物品，图片已脱敏" />
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="拾获时间">{{ shortDateTime(foundDetail.foundTime) }}</el-descriptions-item>
             <el-descriptions-item label="拾获地点">{{ foundDetail.foundLocation }}</el-descriptions-item>
@@ -380,25 +422,70 @@ const detailImages = computed(() => {
             <el-descriptions-item label="发布时间">{{ shortDateTime(foundDetail.createdAt) }}</el-descriptions-item>
           </el-descriptions>
         </div>
+
+        <el-form v-else ref="formRef" :model="foundForm" :rules="foundRules" label-position="top">
+          <el-form-item label="物品名称" prop="itemName">
+            <el-input v-model="foundForm.itemName" maxlength="100" />
+          </el-form-item>
+          <el-form-item label="物品类别" prop="category">
+            <el-select v-model="foundForm.category" style="width: 100%">
+              <el-option v-for="opt in categoryOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="拾获时间" prop="foundTime">
+            <el-date-picker v-model="foundForm.foundTime" type="datetime" format="YYYY-MM-DD HH:mm" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="拾获地点" prop="foundLocation">
+            <el-input v-model="foundForm.foundLocation" maxlength="100" />
+          </el-form-item>
+          <el-form-item label="保管方式" prop="custodyType">
+            <el-select v-model="foundForm.custodyType" style="width: 100%">
+              <el-option v-for="opt in custodyOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="联系偏好" prop="contactPreference">
+            <el-select v-model="foundForm.contactPreference" style="width: 100%">
+              <el-option v-for="opt in contactOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="公开描述" prop="description">
+            <el-input v-model="foundForm.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
+          </el-form-item>
+          <el-form-item label="物品图片">
+            <ImageUploader v-model="foundForm.imageUrls" biz-type="FOUND" :max="5" />
+          </el-form-item>
+        </el-form>
       </template>
 
       <template #footer>
-        <!-- 失物：查看 → 编辑 / 删除 / 关闭 ；编辑 → 取消 / 保存 -->
-        <template v-if="dialogKind === 'lost' && lostDetail">
-          <template v-if="!editing">
-            <el-button type="danger" plain :loading="deleting" @click="handleDelete">
-              删除
-            </el-button>
-            <el-button type="primary" @click="startEdit">编辑</el-button>
-            <el-button @click="dialogVisible = false">关闭</el-button>
-          </template>
-          <template v-else>
-            <el-button @click="cancelEdit">取消</el-button>
-            <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
-          </template>
+        <template v-if="!editing && (lostDetail || foundDetail)">
+          <el-button @click="goMatches">查看匹配</el-button>
+          <el-button
+            v-if="dialogKind === 'lost'"
+            type="success"
+            plain
+            :loading="changingStatus"
+            :disabled="lostDetail?.status !== 'SEARCHING'"
+            @click="updateStatus('FOUND')"
+          >
+            标记已找回
+          </el-button>
+          <el-button
+            type="warning"
+            plain
+            :loading="changingStatus"
+            :disabled="dialogKind === 'lost' ? lostDetail?.status !== 'SEARCHING' : !canCloseFound"
+            @click="updateStatus('CLOSED')"
+          >
+            关闭
+          </el-button>
+          <el-button type="primary" @click="startEdit">编辑</el-button>
+          <el-button @click="dialogVisible = false">返回</el-button>
         </template>
-        <!-- 招领：仅关闭 -->
-        <el-button v-else @click="dialogVisible = false">关闭</el-button>
+        <template v-else-if="editing">
+          <el-button @click="cancelEdit">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
+        </template>
       </template>
     </el-dialog>
   </div>
@@ -410,6 +497,7 @@ const detailImages = computed(() => {
   flex-direction: column;
   gap: 18px;
 }
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -420,7 +508,6 @@ const detailImages = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  // 防止任意子元素的长内容（描述、URL）撑破弹窗
   min-width: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -433,14 +520,12 @@ const detailImages = computed(() => {
   .title {
     margin: 0;
     font-size: 20px;
-    word-break: break-word;
   }
   .desc {
     margin: 0;
     color: var(--xunji-text-muted);
     font-size: 14px;
     line-height: 1.6;
-    word-break: break-word;
   }
   .thumbs {
     display: flex;
@@ -459,9 +544,7 @@ const detailImages = computed(() => {
 </style>
 
 <style lang="scss">
-/* 非 scoped：el-dialog 通过 teleport 渲染到 body，scoped 选不中 */
 .detail-dialog {
-  // 让 body 在小屏内容超长时纵向滚动，而不是横向溢出
   .el-dialog__body {
     max-height: 70vh;
     overflow-y: auto;
@@ -469,14 +552,12 @@ const detailImages = computed(() => {
     padding-top: 12px;
   }
 
-  // descriptions / 表单内长内容自动换行
   .el-descriptions__cell,
   .el-descriptions__label,
   .el-descriptions__content {
     word-break: break-word;
   }
 
-  // 表单内所有控件都不超过容器宽
   .el-form-item__content,
   .el-input,
   .el-select,
@@ -487,11 +568,6 @@ const detailImages = computed(() => {
     width: 100%;
     box-sizing: border-box;
   }
-
-  // datetimerange 在窄屏会被两个时间输入挤出去：允许内容换行 + 缩小内边距
-  .el-date-editor.el-input__wrapper {
-    flex-wrap: wrap;
-  }
 }
 
 @media (max-width: 720px) {
@@ -500,7 +576,6 @@ const detailImages = computed(() => {
       padding-left: 16px;
       padding-right: 16px;
     }
-    // 底部按钮在窄屏纵向铺满，避免横排被挤出
     .el-dialog__footer {
       display: flex;
       flex-direction: column-reverse;
@@ -508,12 +583,6 @@ const detailImages = computed(() => {
       .el-button {
         width: 100%;
         margin-left: 0 !important;
-      }
-    }
-    // datetimerange 在窄屏改竖向，避免左右溢出
-    .el-date-editor--datetimerange {
-      .el-range-input {
-        min-width: 0;
       }
     }
   }

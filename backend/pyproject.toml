@@ -65,6 +65,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]                  # allow assert in tests
 "alembic/versions/*" = ["E501"]        # generated files may exceed line length
+"app/common/pagination.py" = ["N815"]  # camelCase required by API contract
+"app/common/response.py" = ["N815"]    # camelCase required by API contract
+"app/item/schemas.py" = ["N815"]       # camelCase required by API contract
+"app/user/schemas.py" = ["N815"]       # camelCase required by API contract
 
 # ---------- Mypy ----------
 [tool.mypy]

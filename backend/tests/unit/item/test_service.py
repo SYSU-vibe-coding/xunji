@@ -4,6 +4,8 @@ from app.item.schemas import (
     ChangeStatusRequest,
     CreateFoundItemRequest,
     CreateLostItemRequest,
+    FoundItemQuery,
+    LostItemQuery,
     VerifyQuestionInput,
 )
 from app.item.service import ItemService
@@ -178,3 +180,64 @@ class TestFoundItemService:
             created.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER
         )
         assert result["status"] == "CLOSED"
+
+    async def test_batch_create_found_items_partial_failure(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        bg = BackgroundTasks()
+        req = CreateFoundItemRequest(
+            itemName="Batch Pen",
+            category="DAILY_USE",
+            foundTime="2026-04-22 10:00:00",
+            foundLocation="自习室",
+            custodyType="SELF",
+            contactPreference="IN_APP",
+        )
+
+        resp = await svc.create_found_items_batch([req, req], MOCK_USER, bg)
+
+        assert len(resp.success_ids) == 1
+        assert len(resp.failures) == 1
+        assert resp.failures[0].index == 1
+        assert resp.failures[0].error
+
+    async def test_sensitive_found_item_list_and_detail_do_not_return_original_image(self, session):
+        from fastapi import BackgroundTasks
+
+        svc = ItemService(session)
+        bg = BackgroundTasks()
+        req = CreateFoundItemRequest(
+            itemName="Campus Card",
+            category="CERT",
+            foundTime="2026-04-23 10:00:00",
+            foundLocation="图书馆",
+            custodyType="SELF",
+            contactPreference="IN_APP",
+            imageUrls=["https://example.com/raw.jpg"],
+        )
+        created = await svc.create_found_item(req, MOCK_USER, bg)
+
+        listed = await svc.list_found_items(
+            FoundItemQuery(pageNo=1, pageSize=10, category="CERT", status="PENDING")
+        )
+        assert listed["list"][0]["coverImageUrl"] is None
+
+        detail = await svc.get_found_item_detail(created.id, MOCK_USER)
+        assert "https://example.com/raw.jpg" not in detail["imageUrls"]
+
+    async def test_item_schema_validation(self):
+        with pytest.raises(ValueError, match="lostTimeEnd"):
+            CreateLostItemRequest(
+                itemName="Bad Time",
+                category="OTHER",
+                lostTimeStart="2026-04-23 11:00:00",
+                lostTimeEnd="2026-04-23 10:00:00",
+                lostLocation="教学楼",
+            )
+
+        with pytest.raises(ValueError, match="answerKeywords"):
+            VerifyQuestionInput(questionText="什么特征?", answerKeywords=["x" * 21])
+
+        with pytest.raises(ValueError, match="category"):
+            LostItemQuery(category="BAD")

@@ -56,7 +56,6 @@
 |---|---|---|---|
 | nickname | string | 否 | 2-20 字 |
 | avatarUrl | string | 否 | 合法 URL |
-| contactPhone | string | 否 | 11 位 |
 
 ## POST /api/v1/users/me/certification  · 用户
 

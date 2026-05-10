@@ -6,6 +6,7 @@ from app.core.auth import create_access_token
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
+from app.user.models import User
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -44,6 +45,45 @@ async def session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
+async def seeded_users(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            User(
+                id="01TESTUSER000000000000001",
+                phone="13810000001",
+                password_hash="",
+                nickname="测试用户",
+                role="USER",
+                cert_status="UNVERIFIED",
+                credit_score=100,
+                status="ACTIVE",
+            ),
+            User(
+                id="01TESTADMIN00000000000001",
+                phone="13810000002",
+                password_hash="",
+                nickname="测试管理员",
+                role="ADMIN",
+                cert_status="APPROVED",
+                credit_score=100,
+                status="ACTIVE",
+            ),
+            User(
+                id="01TESTSTAFF00000000000001",
+                phone="13810000003",
+                password_hash="",
+                nickname="测试员工",
+                role="STAFF",
+                cert_status="APPROVED",
+                credit_score=100,
+                status="ACTIVE",
+            ),
+        ]
+    )
+    await session.commit()
+
+
+@pytest.fixture
 async def client(session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
 
@@ -73,10 +113,23 @@ def admin_token() -> str:
 
 
 @pytest.fixture
-def auth_headers(user_token: str) -> dict[str, str]:
+def staff_token() -> str:
+    """JWT for a test staff user."""
+    return create_access_token(
+        {"sub": "01TESTSTAFF00000000000001", "role": "STAFF", "status": "ACTIVE"}
+    )
+
+
+@pytest.fixture
+def auth_headers(seeded_users: None, user_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {user_token}"}
 
 
 @pytest.fixture
-def admin_headers(admin_token: str) -> dict[str, str]:
+def admin_headers(seeded_users: None, admin_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {admin_token}"}
+
+
+@pytest.fixture
+def staff_headers(seeded_users: None, staff_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {staff_token}"}

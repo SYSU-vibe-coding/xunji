@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import BizError, ErrorCode
 from app.core.config import settings
+from app.db.session import get_session
+from app.user.repository import UserRepository
 
 if TYPE_CHECKING:
     from app.user.schemas import CurrentUser
@@ -37,8 +40,9 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+    session: AsyncSession = Depends(get_session),
 ) -> CurrentUser:
-    """FastAPI dependency: extract and validate JWT, return CurrentUser DTO."""
+    """FastAPI dependency: extract JWT and verify the user is active in DB."""
     from app.user.schemas import CurrentUser as _CurrentUser
 
     if credentials is None:
@@ -47,23 +51,20 @@ async def get_current_user(
     user_id: str | None = payload.get("sub")
     if user_id is None:
         raise BizError(ErrorCode.UNAUTHORIZED)
-    return _CurrentUser(
-        id=user_id,
-        role=payload.get("role", "USER"),
-        status=payload.get("status", "ACTIVE"),
-    )
+
+    user = await UserRepository(session).get_by_id(user_id)
+    if user is None:
+        raise BizError(ErrorCode.UNAUTHORIZED)
+    if user.status != "ACTIVE":
+        raise BizError(ErrorCode.USER_DISABLED)
+
+    return _CurrentUser(id=user.id, role=user.role, status=user.status)
 
 
-def require_roles(
-    *roles: str,
-) -> Callable[[HTTPAuthorizationCredentials | None], Awaitable[CurrentUser]]:
+def require_roles(*roles: str) -> Callable[[CurrentUser], Coroutine[Any, Any, CurrentUser]]:
     """Return a dependency that checks CurrentUser.role is in the given set."""
 
-    async def _check(
-        credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
-    ) -> CurrentUser:
-
-        user = await get_current_user(credentials)
+    async def _check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if user.role not in roles:
             raise BizError(ErrorCode.FORBIDDEN)
         if user.status != "ACTIVE":

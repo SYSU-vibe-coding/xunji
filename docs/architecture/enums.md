@@ -58,7 +58,7 @@
 `IN_APP` / `PHONE`
 
 ### BizType（`item_images.biz_type` / 通用业务类型）
-`LOST` / `FOUND` / `CLAIM_PROOF` / `CERT`
+`LOST` / `FOUND` / `CLAIM_PROOF` / `CERT` / `USER`
 
 ## 匹配与认领
 

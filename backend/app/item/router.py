@@ -3,11 +3,13 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 
 from app.common.response import success
-from app.core.auth import get_current_user
+from app.common.validators import validate_ulid
+from app.core.auth import get_current_user, require_roles
 from app.item.deps import get_item_service
 from app.item.schemas import (
     ChangeStatusRequest,
     CreateFoundItemRequest,
+    CreateFoundItemsBatchRequest,
     CreateLostItemRequest,
     FoundItemQuery,
     LostItemQuery,
@@ -63,6 +65,7 @@ async def get_lost_item(
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
     data = await svc.get_lost_item_detail(item_id, current_user)
     return success(data=data)
 
@@ -74,6 +77,7 @@ async def change_lost_item_status(
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
     data = await svc.change_lost_item_status(item_id, req, current_user)
     return success(data=data)
 
@@ -89,6 +93,17 @@ async def create_found_item(
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
     data = await svc.create_found_item(req, current_user, background_tasks)
+    return success(data=data.model_dump(by_alias=True))
+
+
+@router.post("/found-items/batch")
+async def create_found_items_batch(
+    req: CreateFoundItemsBatchRequest,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUser = Depends(require_roles("STAFF", "ADMIN")),
+    svc: ItemService = Depends(get_item_service),
+) -> dict[str, Any]:
+    data = await svc.create_found_items_batch(req.items, current_user, background_tasks)
     return success(data=data.model_dump(by_alias=True))
 
 
@@ -127,6 +142,7 @@ async def get_found_item(
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
     data = await svc.get_found_item_detail(item_id, current_user)
     return success(data=data)
 
@@ -138,6 +154,7 @@ async def change_found_item_status(
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
     data = await svc.change_found_item_status(item_id, req, current_user)
     return success(data=data)
 

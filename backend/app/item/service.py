@@ -25,6 +25,8 @@ from app.item.schemas import (
     ChangeStatusRequest,
     CreateFoundItemRequest,
     CreateFoundItemResponse,
+    CreateFoundItemsBatchFailure,
+    CreateFoundItemsBatchResponse,
     CreateLostItemRequest,
     CreateLostItemResponse,
     FileUploadResponse,
@@ -286,6 +288,37 @@ class ItemService:
             id=item_id, status="PENDING", is_sensitive=bool(is_sensitive)
         )
 
+    async def create_found_items_batch(
+        self,
+        items: list[CreateFoundItemRequest],
+        current_user: CurrentUser,
+        background_tasks: BackgroundTasks,
+    ) -> CreateFoundItemsBatchResponse:
+        success_ids: list[str] = []
+        failures: list[CreateFoundItemsBatchFailure] = []
+        seen_keys: set[tuple[str, str, str]] = set()
+
+        for idx, req in enumerate(items):
+            duplicate_key = (req.item_name, req.found_time, req.found_location)
+            if duplicate_key in seen_keys:
+                failures.append(
+                    CreateFoundItemsBatchFailure(index=idx, error="重复提交")
+                )
+                continue
+
+            try:
+                resp = await self.create_found_item(req, current_user, background_tasks)
+                success_ids.append(resp.id)
+                seen_keys.add(duplicate_key)
+            except BizError as exc:
+                await self._session.rollback()
+                failures.append(CreateFoundItemsBatchFailure(index=idx, error=exc.message))
+            except Exception:
+                await self._session.rollback()
+                failures.append(CreateFoundItemsBatchFailure(index=idx, error="服务内部错误"))
+
+        return CreateFoundItemsBatchResponse(success_ids=success_ids, failures=failures)
+
     async def list_found_items(self, query: FoundItemQuery) -> dict[str, Any]:
         offset = (query.page_no - 1) * query.page_size
         items, total = await self._found_repo.list_with_filter(
@@ -305,10 +338,7 @@ class ItemService:
             images = await self._image_repo.get_by_biz("FOUND", item.id)
             cover = None
             if images:
-                if item.is_sensitive and images[0].masked_image_url:
-                    cover = images[0].masked_image_url
-                else:
-                    cover = images[0].image_url
+                cover = images[0].masked_image_url if item.is_sensitive else images[0].image_url
 
             result_list.append(
                 FoundItemListItem(
@@ -340,11 +370,9 @@ class ItemService:
 
         images = await self._image_repo.get_by_biz("FOUND", item_id)
 
-        is_owner = item.user_id == current_user.id
-        is_admin = current_user.role == "ADMIN"
         image_urls: list[str] = []
         for img in images:
-            if item.is_sensitive and not is_owner and not is_admin:
+            if item.is_sensitive:
                 image_urls.append(img.masked_image_url or "")
             else:
                 image_urls.append(img.image_url)

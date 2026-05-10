@@ -6,6 +6,7 @@ from app.common.errors import BizError, ErrorCode
 from app.common.utils import format_beijing, mask_phone
 from app.core.auth import create_access_token
 from app.db.ulid import generate_ulid
+from app.operation_log.service import OperationLogService
 from app.user.models import User, UserCertRequest
 from app.user.repository import UserCertRequestRepository, UserRepository
 from app.user.schemas import (
@@ -30,6 +31,7 @@ class UserService:
         self._session = session
         self._repo = UserRepository(session)
         self._cert_repo = UserCertRequestRepository(session)
+        self._log_svc = OperationLogService(session)
 
     # ---- Auth ----
 
@@ -130,12 +132,21 @@ class UserService:
             document_image_url=req.document_image_url,
             review_status="PENDING",
         )
+        old_status = user.cert_status
         user.campus_id = req.campus_id
         user.real_name = req.real_name
         user.cert_status = "PENDING"
 
         await self._cert_repo.create(cert_request)
         await self._repo.update(user)
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="CERT",
+            biz_id=cert_request.id,
+            action="CREATE",
+            detail=f"实名认证状态变更: {old_status} -> PENDING",
+        )
         await self._session.commit()
         return self._to_cert_response(cert_request, user.real_name)
 
@@ -152,8 +163,17 @@ class UserService:
         user = await self._repo.get_by_id(current_user.id)
         if user is None:
             raise BizError(ErrorCode.NOT_FOUND)
+        old_status = user.status
         user.status = "CANCELLED"
         await self._repo.update(user)
+        await self._log_svc.create_log(
+            operator_id=current_user.id,
+            operator_role=current_user.role,
+            biz_type="USER",
+            biz_id=user.id,
+            action="UPDATE_STATUS",
+            detail=f"用户状态变更: {old_status} -> CANCELLED",
+        )
         await self._session.commit()
         return {"id": current_user.id, "status": "CANCELLED"}
 

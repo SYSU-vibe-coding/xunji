@@ -156,15 +156,18 @@ CREATE TABLE `match_results` (
 DROP TABLE IF EXISTS `claim_requests`;
 CREATE TABLE `claim_requests` (
   `id`            CHAR(26)     NOT NULL,
-  `match_id`      CHAR(26)     NOT NULL,
+  `match_id`      CHAR(26)     DEFAULT NULL,
   `found_item_id` CHAR(26)     NOT NULL,
   `claimant_id`   CHAR(26)     NOT NULL,
   `verify_level`  VARCHAR(20)  NOT NULL COMMENT 'LEVEL_1 / LEVEL_2 / LEVEL_3 / FAST_TRACK',
   `review_status` VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
   `reject_reason` VARCHAR(255) DEFAULT NULL,
+  `proof_text`    VARCHAR(500) DEFAULT NULL COMMENT '认领者补充凭证说明',
+  `appeal_reason` VARCHAR(500) DEFAULT NULL COMMENT '申诉理由',
   `claimed_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_claim_match` (`match_id`),
   KEY `idx_claim_found_item` (`found_item_id`),
   KEY `idx_claim_claimant` (`claimant_id`),
   KEY `idx_claim_status` (`review_status`)
@@ -175,11 +178,12 @@ CREATE TABLE `claim_requests` (
 -- -----------------------------------------------------------
 DROP TABLE IF EXISTS `claim_answers`;
 CREATE TABLE `claim_answers` (
-  `id`          CHAR(26)      NOT NULL,
-  `claim_id`    CHAR(26)      NOT NULL,
-  `question_id` CHAR(26)     NOT NULL,
-  `answer_text` VARCHAR(255)  NOT NULL,
-  `match_score` DECIMAL(5,2)  DEFAULT 0.00,
+  `id`            CHAR(26)      NOT NULL,
+  `claim_id`      CHAR(26)      NOT NULL,
+  `question_id`   CHAR(26)      NOT NULL,
+  `question_text` VARCHAR(255)  NOT NULL,
+  `answer_text`   VARCHAR(255)  NOT NULL,
+  `match_score`   DECIMAL(5,2)  DEFAULT 0.00,
   `created_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_answer_claim` (`claim_id`)
@@ -213,8 +217,8 @@ CREATE TABLE `credit_logs` (
   `delta_score` INT          NOT NULL COMMENT '变动分值(正/负)',
   `reason_code` VARCHAR(50)  NOT NULL,
   `reason_text` VARCHAR(255) DEFAULT NULL,
-  `biz_type`    VARCHAR(30)  DEFAULT NULL,
-  `biz_id`      CHAR(26)     DEFAULT NULL,
+  `biz_type`    VARCHAR(30)  NOT NULL,
+  `biz_id`      CHAR(26)     NOT NULL,
   `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_credit_user` (`user_id`),
@@ -234,10 +238,12 @@ CREATE TABLE `notifications` (
   `is_read`      TINYINT      NOT NULL DEFAULT 0,
   `related_type` VARCHAR(30)  DEFAULT NULL,
   `related_id`   CHAR(26)     DEFAULT NULL,
+  `priority`     VARCHAR(20)  NOT NULL DEFAULT 'NORMAL' COMMENT 'NORMAL / HIGH',
   `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_notif_user_read` (`user_id`, `is_read`),
-  KEY `idx_notif_type` (`notice_type`)
+  KEY `idx_notif_type` (`notice_type`),
+  KEY `idx_notif_related` (`related_type`, `related_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知表';
 
 -- -----------------------------------------------------------

@@ -27,7 +27,12 @@ def event_loop():
 @pytest.fixture(autouse=True)
 async def setup_db():
     """Create tables before each test, drop after."""
+    import app.admin.models
+    import app.claim.models
+    import app.credit.models
     import app.item.models
+    import app.match.models
+    import app.notification.models
     import app.operation_log.models
     import app.user.models  # noqa: F401
 

@@ -72,3 +72,16 @@ def require_roles(*roles: str) -> Callable[[CurrentUser], Coroutine[Any, Any, Cu
         return user
 
     return _check
+
+
+def require_admin() -> Callable[[CurrentUser], Coroutine[Any, Any, CurrentUser]]:
+    """Return a dependency that requires ADMIN role using admin-specific error code."""
+
+    async def _check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if user.role != "ADMIN":
+            raise BizError(ErrorCode.ADMIN_FORBIDDEN)
+        if user.status != "ACTIVE":
+            raise BizError(ErrorCode.USER_DISABLED)
+        return user
+
+    return _check

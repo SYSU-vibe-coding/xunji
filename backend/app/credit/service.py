@@ -1,0 +1,100 @@
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.pagination import PaginationParams, paginate
+from app.common.utils import format_beijing
+from app.credit.models import CreditLog
+from app.credit.repository import CreditLogRepository
+from app.credit.schemas import VALID_CREDIT_REASON_CODES, CreditLogItem, CreditLogQuery
+from app.db.ulid import generate_ulid
+from app.notification.service import NotificationService
+from app.operation_log.service import OperationLogService
+from app.user.service import UserService
+
+
+class CreditService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = CreditLogRepository(session)
+        self._user_svc = UserService(session)
+        self._notification_svc = NotificationService(session)
+        self._log_svc = OperationLogService(session)
+
+    async def change_credit(
+        self,
+        *,
+        user_id: str,
+        delta_score: int,
+        reason_code: str,
+        reason_text: str | None,
+        biz_type: str,
+        biz_id: str,
+        operator_id: str,
+        operator_role: str,
+    ) -> bool:
+        if reason_code not in VALID_CREDIT_REASON_CODES:
+            msg = f"Unsupported credit reason: {reason_code}"
+            raise ValueError(msg)
+
+        exists = await self._repo.exists_by_biz(
+            user_id=user_id,
+            biz_type=biz_type,
+            biz_id=biz_id,
+            reason_code=reason_code,
+        )
+        if exists:
+            return False
+
+        new_score = await self._user_svc.update_credit_score_internal(user_id, delta_score)
+        log = CreditLog(
+            id=generate_ulid(),
+            user_id=user_id,
+            delta_score=delta_score,
+            reason_code=reason_code,
+            reason_text=reason_text,
+            biz_type=biz_type,
+            biz_id=biz_id,
+        )
+        await self._repo.create(log)
+        await self._notification_svc.create_notice(
+            user_id=user_id,
+            notice_type="CREDIT_CHANGED",
+            title="信誉积分变动",
+            content=f"{reason_text or reason_code}: {delta_score:+d},当前积分 {new_score}",
+            related_type=biz_type,
+            related_id=biz_id,
+        )
+        await self._log_svc.create_log(
+            operator_id=operator_id,
+            operator_role=operator_role,
+            biz_type=biz_type,
+            biz_id=biz_id,
+            action="CREDIT_CHANGE",
+            detail=f"{user_id} {reason_code} {delta_score:+d} -> {new_score}",
+        )
+        return True
+
+    async def list_user_logs(self, user_id: str, query: CreditLogQuery) -> dict[str, Any]:
+        offset = (query.page_no - 1) * query.page_size
+        logs, total = await self._repo.list_by_user(
+            user_id=user_id,
+            reason_code=query.reason_code,
+            offset=offset,
+            limit=query.page_size,
+        )
+        result = [self._to_item(log).model_dump(by_alias=True) for log in logs]
+        params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
+        return paginate(result, total, params)
+
+    def _to_item(self, log: CreditLog) -> CreditLogItem:
+        return CreditLogItem(
+            id=log.id,
+            user_id=log.user_id,
+            delta_score=log.delta_score,
+            reason_code=log.reason_code,
+            reason_text=log.reason_text,
+            biz_type=log.biz_type,
+            biz_id=log.biz_id,
+            created_at=format_beijing(log.created_at),
+        )

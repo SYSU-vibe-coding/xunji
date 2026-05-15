@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.user.models import User, UserCertRequest
@@ -25,6 +25,36 @@ class UserRepository:
         await self._session.merge(user)
         await self._session.flush()
         return user
+
+    async def list_with_filter(
+        self,
+        *,
+        role: str | None,
+        status: str | None,
+        keyword: str | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[User], int]:
+        stmt = select(User)
+        count_stmt = select(func.count()).select_from(User)
+        if role:
+            stmt = stmt.where(User.role == role)
+            count_stmt = count_stmt.where(User.role == role)
+        if status:
+            stmt = stmt.where(User.status == status)
+            count_stmt = count_stmt.where(User.status == status)
+        if keyword:
+            pattern = f"%{keyword}%"
+            cond = or_(
+                User.phone.like(pattern), User.nickname.like(pattern), User.campus_id.like(pattern)
+            )
+            stmt = stmt.where(cond)
+            count_stmt = count_stmt.where(cond)
+        stmt = stmt.order_by(User.created_at.desc()).offset(offset).limit(limit)
+        total_result = await self._session.execute(count_stmt)
+        total = total_result.scalar() or 0
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all()), total
 
 
 class UserCertRequestRepository:
@@ -53,3 +83,28 @@ class UserCertRequestRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_by_id(self, cert_id: str) -> UserCertRequest | None:
+        result = await self._session.execute(
+            select(UserCertRequest).where(UserCertRequest.id == cert_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_with_filter(
+        self, *, review_status: str | None, offset: int, limit: int
+    ) -> tuple[list[UserCertRequest], int]:
+        stmt = select(UserCertRequest)
+        count_stmt = select(func.count()).select_from(UserCertRequest)
+        if review_status:
+            stmt = stmt.where(UserCertRequest.review_status == review_status)
+            count_stmt = count_stmt.where(UserCertRequest.review_status == review_status)
+        stmt = stmt.order_by(UserCertRequest.created_at.desc()).offset(offset).limit(limit)
+        total_result = await self._session.execute(count_stmt)
+        total = total_result.scalar() or 0
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all()), total
+
+    async def update(self, cert_request: UserCertRequest) -> UserCertRequest:
+        await self._session.merge(cert_request)
+        await self._session.flush()
+        return cert_request

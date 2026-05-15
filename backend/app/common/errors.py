@@ -30,14 +30,29 @@ class ErrorCode:
     MATCH_NOT_FOUND = 43001
     MATCH_CLAIMED = 43002
 
-    # Claim 44xxx (for later phases)
+    # Claim 44xxx
     CLAIM_DUPLICATE = 44001
     CLAIM_NOT_FOUND = 44002
     CLAIM_INVALID_STATE = 44003
+    CLAIM_ANSWER_MISMATCH = 44004
+    CLAIM_PROOF_MISSING = 44005
+    CLAIM_NOT_PARTY = 44006
+    APPEAL_DUPLICATE = 44007
 
     # Credit 45xxx
     CREDIT_INSUFFICIENT = 45001
     CREDIT_FROZEN = 45002
+
+    # Notification 46xxx
+    NOTIFICATION_NOT_FOUND = 46001
+
+    # Report 47xxx
+    REPORT_TARGET_NOT_FOUND = 47001
+    REPORT_DUPLICATE = 47002
+
+    # Admin 48xxx
+    REVIEW_STATE_CHANGED = 48001
+    ADMIN_FORBIDDEN = 48002
 
     # Server 50xxx
     INTERNAL_ERROR = 50001
@@ -64,6 +79,22 @@ _CODE_MESSAGES: dict[int, str] = {
     ErrorCode.IMAGE_EXCEED: "图片数量超限(>5)",
     ErrorCode.NOT_PUBLISHER: "非发布者不可修改",
     ErrorCode.SENSITIVE_UNAUTHORIZED: "敏感物品原图越权访问",
+    ErrorCode.MATCH_NOT_FOUND: "匹配结果不存在",
+    ErrorCode.MATCH_CLAIMED: "匹配结果已被认领",
+    ErrorCode.CLAIM_DUPLICATE: "该物品已有进行中的认领",
+    ErrorCode.CLAIM_NOT_FOUND: "认领不存在",
+    ErrorCode.CLAIM_INVALID_STATE: "认领状态不允许该操作",
+    ErrorCode.CLAIM_ANSWER_MISMATCH: "验证答案不匹配",
+    ErrorCode.CLAIM_PROOF_MISSING: "凭证未上传",
+    ErrorCode.CLAIM_NOT_PARTY: "非认领当事人不可操作",
+    ErrorCode.APPEAL_DUPLICATE: "申诉已提交,不可重复",
+    ErrorCode.CREDIT_INSUFFICIENT: "信誉积分不足",
+    ErrorCode.CREDIT_FROZEN: "信誉积分过低,暂不可认领",
+    ErrorCode.NOTIFICATION_NOT_FOUND: "通知不存在",
+    ErrorCode.REPORT_TARGET_NOT_FOUND: "举报目标不存在",
+    ErrorCode.REPORT_DUPLICATE: "重复举报",
+    ErrorCode.REVIEW_STATE_CHANGED: "审核状态已变化",
+    ErrorCode.ADMIN_FORBIDDEN: "需要管理员权限",
     ErrorCode.INTERNAL_ERROR: "服务内部错误",
     ErrorCode.AI_SERVICE_ERROR: "AI 服务调用失败",
     ErrorCode.STORAGE_ERROR: "对象存储不可用",

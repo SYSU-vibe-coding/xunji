@@ -156,6 +156,12 @@ class FoundItemRepository:
         await self._session.flush()
         return item
 
+    async def list_ids_by_user(self, user_id: str) -> list[str]:
+        result = await self._session.execute(
+            select(FoundItem.id).where(FoundItem.user_id == user_id)
+        )
+        return list(result.scalars().all())
+
     async def check_duplicate(
         self, user_id: str, item_name: str, found_time: str, found_location: str
     ) -> bool:

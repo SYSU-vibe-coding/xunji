@@ -36,11 +36,19 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     # Routers
+    from app.admin.router import router as admin_router
+    from app.claim.router import router as claim_router
+    from app.credit.router import router as credit_router
     from app.item.router import router as item_router
+    from app.notification.router import router as notification_router
     from app.user.router import router as user_router
 
     app.include_router(user_router, prefix=settings.API_V1_PREFIX)
     app.include_router(item_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(notification_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(credit_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(claim_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

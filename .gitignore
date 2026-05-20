@@ -9,6 +9,9 @@ Thumbs.db
 .codex
 .claude/
 
+# Local reference materials
+参考/
+
 # Logs
 *.log
 logs/

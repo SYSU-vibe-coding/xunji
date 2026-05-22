@@ -1,0 +1,136 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: xunji-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-xunji_root_password}
+      MYSQL_DATABASE: ${DB_NAME:-xunji}
+      MYSQL_USER: ${DB_USER:-xunji}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-xunji_password}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../../backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../../backend/sql/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: xunji-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  ai-service:
+    build:
+      context: ../..
+      dockerfile: ai-service/Dockerfile
+    image: xunji/ai-service:local
+    container_name: xunji-ai-service
+    restart: unless-stopped
+    ports:
+      - "${AI_SERVICE_PORT:-5000}:5000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    image: xunji/backend:local
+    container_name: xunji-backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-xunji}
+      DB_USER: ${DB_USER:-xunji}
+      DB_PASSWORD: ${DB_PASSWORD:-xunji_password}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      AI_SERVICE_BASE_URL: http://ai-service:5000
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-xunji}
+      MINIO_SECURE: "false"
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+      minio:
+        condition: service_started
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/docs', timeout=2).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  user-web:
+    build:
+      context: ../..
+      dockerfile: frontend/user-app/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    image: xunji/user-web:local
+    container_name: xunji-user-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${USER_WEB_PORT:-18080}:80"
+
+  admin-web:
+    build:
+      context: ../..
+      dockerfile: frontend/admin-web/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    image: xunji/admin-web:local
+    container_name: xunji-admin-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${ADMIN_WEB_PORT:-18081}:80"
+
+volumes:
+  mysql-data:
+  minio-data:

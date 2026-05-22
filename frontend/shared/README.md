@@ -1,3 +1,6 @@
 # Shared Frontend Code
 
-Store shared request utilities, API types and constants here.
+Shared API-facing TypeScript types, enum labels, and demo data used by the two independent frontend services:
+
+- `frontend/user-app`: user web service
+- `frontend/admin-web`: admin web service

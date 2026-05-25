@@ -500,8 +500,10 @@ class ItemService:
                     "bizType": "LOST",
                     "itemName": item.item_name,
                     "category": item.category,
+                    "location": item.lost_location,
                     "status": item.status,
                     "userId": item.user_id,
+                    "reportCount": 0,
                     "createdAt": format_beijing(item.created_at),
                 }
                 for item in lost_items
@@ -517,8 +519,10 @@ class ItemService:
                     "bizType": "FOUND",
                     "itemName": item.item_name,
                     "category": item.category,
+                    "location": item.found_location,
                     "status": item.status,
                     "userId": item.user_id,
+                    "reportCount": 0,
                     "createdAt": format_beijing(item.created_at),
                 }
                 for item in found_items

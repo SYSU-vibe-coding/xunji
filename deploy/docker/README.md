@@ -62,7 +62,7 @@ Default ports:
 - MySQL: `localhost:3306`
 - MinIO console: `http://localhost:9001`
 
-The MySQL container initializes from `backend/sql/schema.sql` and `backend/sql/seed-demo.sql` on first volume creation. To reset local data:
+The MySQL container initializes an empty schema from `backend/sql/schema.sql` on first volume creation. The backend creates the default administrator from `ADMIN_ACCOUNT`, `ADMIN_PASSWORD`, and `ADMIN_PHONE`. To reset local data:
 
 ```bash
 docker compose -f deploy/docker/docker-compose.yml down -v

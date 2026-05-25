@@ -7,9 +7,10 @@
 | 字段 | 类型 | 必填 | 约束 |
 |---|---|---|---|
 | loginType | enum | 是 | `PHONE_CODE` / `PASSWORD` |
-| phone | string | 是 | 11 位数字 |
+| phone | string | 条件 | 用户手机号登录时必填，11 位数字 |
+| account | string | 条件 | 后台账号登录时必填，3-64 位 |
 | code | string | 条件 | `PHONE_CODE` 必填，6 位数字 |
-| password | string | 条件 | `PASSWORD` 必填，明文 6-32 位 |
+| password | string | 条件 | `PASSWORD` 必填，6-32 位 |
 
 返回 `data`：
 | 字段 | 类型 | 说明 |
@@ -22,9 +23,20 @@
 | user.certStatus | CertStatus | |
 | user.creditScore | int | |
 
-不存在的手机号且 `PHONE_CODE` 登录自动注册。
+用户注册后使用手机号密码登录；后台管理员使用账号密码登录。管理员账号不允许通过验证码登录。
 
 错误：`41002` 验证码错 · `41005` 用户禁用
+
+## POST /api/v1/auth/register  · 公开
+
+| 字段 | 类型 | 必填 | 约束 |
+|---|---|---|---|
+| phone | string | 是 | 11 位数字 |
+| code | string | 是 | 6 位数字 |
+| password | string | 是 | 6-32 位 |
+| nickname | string | 是 | 2-20 字 |
+
+返回同 `/auth/login`。手机号已注册返回 `41001`。
 
 ## POST /api/v1/auth/sms-code  · 公开
 

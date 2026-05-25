@@ -2,17 +2,26 @@ from httpx import AsyncClient
 
 
 async def _login_and_get_headers(client: AsyncClient, phone: str) -> dict[str, str]:
-    """Helper: login and return auth headers."""
+    """Helper: register, login, and return auth headers."""
     code_resp = await client.post(
         "/api/v1/auth/sms-code",
         json={"phone": phone},
     )
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "phone": phone,
+            "code": code_resp.json()["data"]["debugCode"],
+            "password": "secret123",
+            "nickname": f"用户{phone[-4:]}",
+        },
+    )
     resp = await client.post(
         "/api/v1/auth/login",
         json={
-            "loginType": "PHONE_CODE",
+            "loginType": "PASSWORD",
             "phone": phone,
-            "code": code_resp.json()["data"]["debugCode"],
+            "password": "secret123",
         },
     )
     token = resp.json()["data"]["token"]

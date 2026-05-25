@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.errors import BizError, ErrorCode
 from app.common.utils import format_beijing, mask_phone
 from app.core.auth import create_access_token
+from app.core.config import settings
+from app.core.security import hash_password, verify_password
 from app.db.ulid import generate_ulid
 from app.operation_log.service import OperationLogService
 from app.user.models import User, UserCertRequest
@@ -16,13 +18,14 @@ from app.user.schemas import (
     LoginRequest,
     LoginResponse,
     LoginUserData,
+    RegisterRequest,
     SmsCodeRequest,
     SmsCodeResponse,
     UpdateProfileRequest,
     UserProfileResponse,
 )
 
-DEMO_SMS_CODE = "123456"
+LOCAL_SMS_CODE = "123456"
 _sms_codes: dict[str, tuple[str, datetime, datetime]] = {}
 
 
@@ -40,44 +43,65 @@ class UserService:
         existing = _sms_codes.get(req.phone)
         if existing is not None:
             _, _, sent_at = existing
-            if now - sent_at < timedelta(seconds=60):
+            if now - sent_at < timedelta(seconds=settings.SMS_CODE_COOLDOWN_SECONDS):
                 raise BizError(ErrorCode.DUPLICATE_SUBMIT)
 
-        expires_at = now + timedelta(seconds=300)
-        _sms_codes[req.phone] = (DEMO_SMS_CODE, expires_at, now)
-        return SmsCodeResponse(sent=True, expires_in=300, debug_code=DEMO_SMS_CODE)
+        expires_at = now + timedelta(seconds=settings.SMS_CODE_TTL_SECONDS)
+        _sms_codes[req.phone] = (LOCAL_SMS_CODE, expires_at, now)
+        return SmsCodeResponse(
+            sent=True,
+            expires_in=settings.SMS_CODE_TTL_SECONDS,
+            debug_code=LOCAL_SMS_CODE,
+        )
 
     async def login(self, req: LoginRequest) -> LoginResponse:
         if req.login_type == "PHONE_CODE":
+            if req.phone is None:
+                raise BizError(ErrorCode.PARAM_ERROR)
             self._validate_sms_code(req.phone, req.code)
         elif req.password is None:
             raise BizError(ErrorCode.PARAM_ERROR)
 
-        user = await self._repo.get_by_phone(req.phone)
+        user = (
+            await self._repo.get_by_phone(req.phone)
+            if req.phone is not None
+            else await self._repo.get_by_account(req.account or "")
+        )
         if user is None:
-            if req.login_type != "PHONE_CODE":
-                raise BizError(ErrorCode.UNAUTHORIZED)
-            user = User(
-                id=generate_ulid(),
-                phone=req.phone,
-                password_hash="",
-                nickname=f"用户{req.phone[-4:]}",
-                role="USER",
-                cert_status="UNVERIFIED",
-                credit_score=100,
-                status="ACTIVE",
-            )
-            await self._repo.create(user)
-            await self._session.commit()
-        else:
-            if user.status != "ACTIVE":
-                raise BizError(ErrorCode.USER_DISABLED)
-            if req.login_type == "PASSWORD" and user.password_hash != req.password:
-                raise BizError(ErrorCode.UNAUTHORIZED)
+            raise BizError(ErrorCode.UNAUTHORIZED)
+        if user.status != "ACTIVE":
+            raise BizError(ErrorCode.USER_DISABLED)
+        if user.role == "ADMIN" and req.login_type != "PASSWORD":
+            raise BizError(ErrorCode.UNAUTHORIZED)
+        if req.login_type == "PASSWORD" and not verify_password(
+            req.password or "", user.password_hash
+        ):
+            raise BizError(ErrorCode.UNAUTHORIZED)
 
         token = create_access_token({"sub": user.id, "role": user.role, "status": user.status})
         user_data = LoginUserData.model_validate(user)
         return LoginResponse(token=token, user=user_data)
+
+    async def register(self, req: RegisterRequest) -> LoginResponse:
+        self._validate_sms_code(req.phone, req.code)
+        existing = await self._repo.get_by_phone(req.phone)
+        if existing is not None:
+            raise BizError(ErrorCode.PHONE_REGISTERED)
+
+        user = User(
+            id=generate_ulid(),
+            phone=req.phone,
+            password_hash=hash_password(req.password),
+            nickname=req.nickname,
+            role="USER",
+            cert_status="UNVERIFIED",
+            credit_score=100,
+            status="ACTIVE",
+        )
+        await self._repo.create(user)
+        await self._session.commit()
+        token = create_access_token({"sub": user.id, "role": user.role, "status": user.status})
+        return LoginResponse(token=token, user=LoginUserData.model_validate(user))
 
     def _validate_sms_code(self, phone: str, code: str | None) -> None:
         if code is None:

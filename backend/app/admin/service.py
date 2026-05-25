@@ -99,6 +99,9 @@ class AdminService:
     ) -> dict[str, Any]:
         offset = (page_no - 1) * page_size
         items, total = await self._item_svc.list_admin_items_internal(biz_type, offset, page_size)
+        for item in items:
+            user = await self._user_svc.get_user_internal(item["userId"])
+            item["ownerNickname"] = user.nickname if user else ""
         return paginate(items, total, PaginationParams(pageNo=page_no, pageSize=page_size))
 
     async def review_item(

@@ -9,6 +9,7 @@ from app.user.schemas import (
     CertificationRequest,
     CurrentUser,
     LoginRequest,
+    RegisterRequest,
     SmsCodeRequest,
     UpdateProfileRequest,
 )
@@ -35,6 +36,15 @@ async def login(
     svc: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
     data = await svc.login(req)
+    return success(data=data.model_dump(by_alias=True))
+
+
+@router.post("/auth/register")
+async def register(
+    req: RegisterRequest,
+    svc: UserService = Depends(get_user_service),
+) -> dict[str, Any]:
+    data = await svc.register(req)
     return success(data=data.model_dump(by_alias=True))
 
 

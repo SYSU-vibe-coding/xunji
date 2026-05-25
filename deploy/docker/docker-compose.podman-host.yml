@@ -16,7 +16,6 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ../../backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ../../backend/sql/seed-demo.sql:/docker-entrypoint-initdb.d/02-seed-demo.sql:ro
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
@@ -42,12 +41,15 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      DB_HOST: 127.0.0.1
-      DB_PORT: 3306
+      DB_HOST: ${DB_HOST:-127.0.0.1}
+      DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-xunji}
       DB_USER: ${DB_USER:-xunji}
       DB_PASSWORD: ${DB_PASSWORD:-xunji_password}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      ADMIN_ACCOUNT: ${ADMIN_ACCOUNT:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123456}
+      ADMIN_PHONE: ${ADMIN_PHONE:-19900000000}
       AI_SERVICE_BASE_URL: http://127.0.0.1:5000
       MINIO_ENDPOINT: 127.0.0.1:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}

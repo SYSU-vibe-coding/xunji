@@ -124,6 +124,10 @@ export function listLostItems(params = 'pageNo=1&pageSize=20'): Promise<PageData
   return requestJson<PageData<LostItemSummary>>(`${userApiRoutes.lostItems}?${params}`);
 }
 
+export function getLostItem(id: string): Promise<LostItemSummary> {
+  return requestJson<LostItemSummary>(`${userApiRoutes.lostItems}/${id}`);
+}
+
 export async function listMyClaims(params = 'pageNo=1&pageSize=20'): Promise<PageData<ClaimSummary>> {
   const data = await requestJson<PageData<ClaimSummary>>(`${userApiRoutes.claims}/my?${params}`);
   return {
@@ -143,6 +147,19 @@ export function createLostItem(payload: unknown): Promise<{ id: string; status: 
   return requestJson<{ id: string; status: string }>(userApiRoutes.lostItems, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export function updateLostItem(payload: { id: string; data: unknown }): Promise<{ id: string; status: string; reviewStatus: string }> {
+  return requestJson<{ id: string; status: string; reviewStatus: string }>(`${userApiRoutes.lostItems}/${payload.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload.data),
+  });
+}
+
+export function deleteLostItem(id: string): Promise<{ id: string; status: string }> {
+  return requestJson<{ id: string; status: string }>(`${userApiRoutes.lostItems}/${id}`, {
+    method: 'DELETE',
   });
 }
 

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 
-export type UserPage = 'home' | 'search' | 'publish' | 'matches' | 'messages' | 'profile';
+export type UserPage = 'home' | 'search' | 'publish' | 'matches' | 'messages' | 'profile' | 'lost-detail';
 
 export const useNavigationStore = defineStore('user-navigation', {
   state: () => ({

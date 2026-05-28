@@ -13,6 +13,7 @@ from app.item.schemas import (
     CreateLostItemRequest,
     FoundItemQuery,
     LostItemQuery,
+    UpdateLostItemRequest,
 )
 from app.item.service import ItemService
 from app.user.schemas import CurrentUser
@@ -67,6 +68,29 @@ async def get_lost_item(
 ) -> dict[str, Any]:
     item_id = validate_ulid(item_id, "itemId")
     data = await svc.get_lost_item_detail(item_id, current_user)
+    return success(data=data)
+
+
+@router.put("/lost-items/{item_id}")
+async def update_lost_item(
+    item_id: str,
+    req: UpdateLostItemRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    svc: ItemService = Depends(get_item_service),
+) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
+    data = await svc.update_lost_item(item_id, req, current_user)
+    return success(data=data)
+
+
+@router.delete("/lost-items/{item_id}")
+async def delete_lost_item(
+    item_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    svc: ItemService = Depends(get_item_service),
+) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
+    data = await svc.delete_lost_item(item_id, current_user)
     return success(data=data)
 
 

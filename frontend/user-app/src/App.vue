@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, type Component } from 'vue';
 import {
+  ArrowLeft,
   ArrowRight,
   Bell,
   Building2,
@@ -13,11 +14,13 @@ import {
   LockKeyhole,
   MessageSquareText,
   PackageCheck,
+  Pencil,
   PlusCircle,
   Search,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   UserRound,
 } from 'lucide-vue-next';
 
@@ -27,6 +30,8 @@ import {
   clearStoredToken,
   createFoundItem,
   createLostItem,
+  deleteLostItem,
+  getLostItem,
   getMyProfile,
   getStoredToken,
   listFoundItems,
@@ -36,6 +41,7 @@ import {
   loginWithPassword,
   registerWithPhone,
   sendSmsCode,
+  updateLostItem,
 } from '@/api/client';
 import { useNavigationStore, type UserPage } from '@/stores/navigation';
 import {
@@ -45,7 +51,9 @@ import {
   contactOptions,
   custodyOptions,
   formatPercent,
+  lostStatusLabels,
   noticeTypeLabels,
+  reviewStatusLabels,
   scoreTone,
   timeShort,
   verifyLevelLabels,
@@ -73,6 +81,7 @@ const navItems: Array<{ key: UserPage; label: string; icon: Component }> = [
 ];
 
 const mobileNavItems = computed(() => navItems.slice(0, 5));
+const showMobileDockIndicator = computed(() => mobileNavItems.value.some((item) => item.key === navigation.activePage));
 const activeMobileTabIndex = computed(() => {
   const index = mobileNavItems.value.findIndex((item) => item.key === navigation.activePage);
   return index >= 0 ? index : 0;
@@ -100,6 +109,12 @@ const smsHint = ref('');
 const isSendingCode = ref(false);
 const isLoggingIn = ref(false);
 const isSubmittingPublish = ref(false);
+const selectedLostItem = ref<LostItemSummary | null>(null);
+const lostDetailBackPage = ref<UserPage>('profile');
+const isEditingLost = ref(false);
+const isSavingLost = ref(false);
+const toast = ref<{ message: string; tone: 'success' | 'danger' | 'info' } | null>(null);
+let toastTimer: number | undefined;
 
 const loginForm = reactive({
   phone: '',
@@ -118,6 +133,17 @@ const lostForm = reactive({
   category: 'ELECTRONIC' as ItemCategory,
   lostTimeStart: '2026-04-28 09:00:00',
   lostTimeEnd: '2026-04-28 10:00:00',
+  lostLocation: '',
+  description: '',
+  subscribeMatch: true,
+  imageUrls: '',
+});
+
+const editLostForm = reactive({
+  itemName: '',
+  category: 'ELECTRONIC' as ItemCategory,
+  lostTimeStart: '',
+  lostTimeEnd: '',
   lostLocation: '',
   description: '',
   subscribeMatch: true,
@@ -155,6 +181,11 @@ const canRegister = computed(
 const canSubmitLost = computed(
   () => Boolean(lostForm.itemName.trim() && lostForm.lostLocation.trim() && lostForm.lostTimeStart && lostForm.lostTimeEnd) && !isSubmittingPublish.value,
 );
+const canSaveLost = computed(
+  () =>
+    Boolean(editLostForm.itemName.trim() && editLostForm.lostLocation.trim() && editLostForm.lostTimeStart && editLostForm.lostTimeEnd) &&
+    !isSavingLost.value,
+);
 const canSubmitFound = computed(
   () => Boolean(foundForm.itemName.trim() && foundForm.foundLocation.trim() && foundForm.foundTime) && !isSubmittingPublish.value,
 );
@@ -163,6 +194,9 @@ const homeStats = computed(() => [
   { label: '我的失物', value: lostItems.value.length, suffix: '条' },
   { label: '信誉分', value: currentUser.value.creditScore, suffix: '' },
 ]);
+const canManageSelectedLost = computed(
+  () => Boolean(selectedLostItem.value && selectedLostItem.value.userId === currentUser.value.id),
+);
 
 const visibleFoundItems = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
@@ -171,7 +205,7 @@ const visibleFoundItems = computed(() => {
     const matchesKeyword =
       !keyword ||
       item.itemName.toLowerCase().includes(keyword) ||
-      item.description.toLowerCase().includes(keyword) ||
+      (item.description ?? '').toLowerCase().includes(keyword) ||
       item.foundLocation.toLowerCase().includes(keyword);
     return matchesCategory && matchesKeyword;
   });
@@ -184,7 +218,7 @@ const visibleLostItems = computed(() => {
     const matchesKeyword =
       !keyword ||
       item.itemName.toLowerCase().includes(keyword) ||
-      item.description.toLowerCase().includes(keyword) ||
+      (item.description ?? '').toLowerCase().includes(keyword) ||
       item.lostLocation.toLowerCase().includes(keyword);
     return matchesCategory && matchesKeyword;
   });
@@ -192,6 +226,16 @@ const visibleLostItems = computed(() => {
 
 function go(page: UserPage) {
   navigation.go(page);
+}
+
+function showToast(message: string, tone: 'success' | 'danger' | 'info' = 'info') {
+  toast.value = { message, tone };
+  if (toastTimer) {
+    window.clearTimeout(toastTimer);
+  }
+  toastTimer = window.setTimeout(() => {
+    toast.value = null;
+  }, 2600);
 }
 
 function createEmptyUser(): CurrentUser {
@@ -207,6 +251,43 @@ function createEmptyUser(): CurrentUser {
     creditScore: 100,
     status: 'ACTIVE',
   };
+}
+
+function lostPayloadFromForm(form: typeof lostForm | typeof editLostForm) {
+  return {
+    itemName: form.itemName,
+    category: form.category,
+    lostTimeStart: form.lostTimeStart,
+    lostTimeEnd: form.lostTimeEnd,
+    lostLocation: form.lostLocation,
+    description: form.description || null,
+    subscribeMatch: form.subscribeMatch,
+    imageUrls: splitUrls(form.imageUrls),
+  };
+}
+
+function fillEditLostForm(item: LostItemSummary) {
+  editLostForm.itemName = item.itemName;
+  editLostForm.category = item.category;
+  editLostForm.lostTimeStart = item.lostTimeStart;
+  editLostForm.lostTimeEnd = item.lostTimeEnd;
+  editLostForm.lostLocation = item.lostLocation;
+  editLostForm.description = item.description ?? '';
+  editLostForm.subscribeMatch = Boolean(item.subscribeMatch);
+  editLostForm.imageUrls = (item.imageUrls ?? []).join(', ');
+}
+
+async function openLostDetail(itemId: string, backPage: UserPage = navigation.activePage) {
+  try {
+    const detail = await getLostItem(itemId);
+    selectedLostItem.value = detail;
+    lostDetailBackPage.value = backPage === 'lost-detail' ? 'profile' : backPage;
+    fillEditLostForm(detail);
+    isEditingLost.value = false;
+    navigation.go('lost-detail');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '无法打开失物详情', 'danger');
+  }
 }
 
 async function requestSmsCode() {
@@ -295,6 +376,8 @@ function logout() {
   clearStoredToken();
   isAuthenticated.value = false;
   currentUser.value = createEmptyUser();
+  selectedLostItem.value = null;
+  isEditingLost.value = false;
 }
 
 async function loadBackendData() {
@@ -343,21 +426,14 @@ function splitUrls(value: string): string[] {
 }
 
 async function submitPublish() {
-  submitState.value = '提交中...';
+  submitState.value = '';
   isSubmittingPublish.value = true;
   try {
     if (publishMode.value === 'LOST') {
-      const result = await createLostItem({
-        itemName: lostForm.itemName,
-        category: lostForm.category,
-        lostTimeStart: lostForm.lostTimeStart,
-        lostTimeEnd: lostForm.lostTimeEnd,
-        lostLocation: lostForm.lostLocation,
-        description: lostForm.description || null,
-        subscribeMatch: lostForm.subscribeMatch,
-        imageUrls: splitUrls(lostForm.imageUrls),
-      });
-      submitState.value = `失物发布成功，状态：${result.status}`;
+      const result = await createLostItem(lostPayloadFromForm(lostForm));
+      showToast('失物发布成功', 'success');
+      await loadBackendData();
+      await openLostDetail(result.id, 'profile');
     } else {
       const verifyQuestions =
         foundForm.verifyQuestion && foundForm.answerKeywords
@@ -371,7 +447,7 @@ async function submitPublish() {
               },
             ]
           : [];
-      const result = await createFoundItem({
+      await createFoundItem({
         itemName: foundForm.itemName,
         category: foundForm.category,
         foundTime: foundForm.foundTime,
@@ -382,13 +458,51 @@ async function submitPublish() {
         verifyQuestions,
         imageUrls: splitUrls(foundForm.imageUrls),
       });
-      submitState.value = `招领发布成功，状态：${result.status}${result.isSensitive ? '，已按敏感物品处理' : ''}`;
+      showToast('招领发布成功', 'success');
+      await loadBackendData();
     }
-    await loadBackendData();
   } catch (error) {
-    submitState.value = error instanceof Error ? `提交失败：${error.message}` : '提交失败';
+    showToast(error instanceof Error ? error.message : '提交失败', 'danger');
   } finally {
     isSubmittingPublish.value = false;
+  }
+}
+
+async function saveLostDetail() {
+  if (!selectedLostItem.value || !canSaveLost.value) return;
+  const itemId = selectedLostItem.value.id;
+  const backPage = lostDetailBackPage.value;
+  isSavingLost.value = true;
+  try {
+    await updateLostItem({
+      id: itemId,
+      data: lostPayloadFromForm(editLostForm),
+    });
+    showToast('失物信息已提交审核', 'success');
+    await loadBackendData();
+    await openLostDetail(itemId, backPage);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '保存失败', 'danger');
+  } finally {
+    isSavingLost.value = false;
+  }
+}
+
+async function removeLostDetail() {
+  if (!selectedLostItem.value) return;
+  if (!window.confirm('确认删除这条失物信息？')) return;
+  isSavingLost.value = true;
+  try {
+    await deleteLostItem(selectedLostItem.value.id);
+    showToast('失物信息已删除', 'success');
+    selectedLostItem.value = null;
+    isEditingLost.value = false;
+    await loadBackendData();
+    navigation.go('profile');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '删除失败', 'danger');
+  } finally {
+    isSavingLost.value = false;
   }
 }
 
@@ -401,6 +515,15 @@ onMounted(async () => {
 
 <template>
   <div class="app-frame" :class="{ 'auth-mode': !isAuthenticated }">
+    <Transition name="toast">
+      <div v-if="toast" class="toast" :class="`toast-${toast.tone}`">
+        <CheckCircle2 v-if="toast.tone === 'success'" :size="18" />
+        <LockKeyhole v-else-if="toast.tone === 'danger'" :size="18" />
+        <Bell v-else :size="18" />
+        <span>{{ toast.message }}</span>
+      </div>
+    </Transition>
+
     <section v-if="!isAuthenticated" class="auth-view">
       <div class="auth-hero">
         <div class="brand-lockup">
@@ -684,7 +807,7 @@ onMounted(async () => {
                 <ItemCard v-for="item in visibleFoundItems" :key="item.id" kind="found" :item="item" />
               </template>
               <template v-else>
-                <ItemCard v-for="item in visibleLostItems" :key="item.id" kind="lost" :item="item" />
+                <ItemCard v-for="item in visibleLostItems" :key="item.id" kind="lost" :item="item" interactive @open="openLostDetail(item.id, 'search')" />
               </template>
             </div>
             <div
@@ -871,6 +994,104 @@ onMounted(async () => {
             </div>
           </section>
 
+          <section v-else-if="navigation.activePage === 'lost-detail'" key="lost-detail" class="page-stack">
+            <div class="page-heading with-actions">
+              <div>
+                <span class="eyebrow">Lost Item</span>
+                <h1>{{ selectedLostItem?.itemName ?? '失物详情' }}</h1>
+              </div>
+              <button type="button" class="button button-secondary" @click="go(lostDetailBackPage)">
+                <ArrowLeft :size="18" />
+                返回
+              </button>
+            </div>
+
+            <article v-if="selectedLostItem" class="card detail-card">
+              <div class="detail-hero">
+                <div class="detail-media">
+                  <img v-if="selectedLostItem.coverImageUrl" :src="selectedLostItem.coverImageUrl" :alt="selectedLostItem.itemName" />
+                  <div v-else class="inline-item-fallback"><Inbox :size="32" /></div>
+                </div>
+                <div class="detail-summary">
+                  <div class="detail-badges">
+                    <span class="badge">{{ categoryLabels[selectedLostItem.category] }}</span>
+                    <span class="badge">{{ lostStatusLabels[selectedLostItem.status] }}</span>
+                    <span class="badge">{{ reviewStatusLabels[selectedLostItem.reviewStatus] }}</span>
+                  </div>
+                  <h2>{{ selectedLostItem.itemName }}</h2>
+                  <p>{{ selectedLostItem.description || '无描述' }}</p>
+                  <dl class="detail-list">
+                    <div>
+                      <dt>丢失地点</dt>
+                      <dd>{{ selectedLostItem.lostLocation }}</dd>
+                    </div>
+                    <div>
+                      <dt>丢失时间</dt>
+                      <dd>{{ selectedLostItem.lostTimeStart }} - {{ selectedLostItem.lostTimeEnd }}</dd>
+                    </div>
+                    <div>
+                      <dt>更新时间</dt>
+                      <dd>{{ selectedLostItem.updatedAt ?? selectedLostItem.createdAt }}</dd>
+                    </div>
+                  </dl>
+                  <div v-if="canManageSelectedLost" class="row-actions">
+                    <button type="button" class="button button-secondary" @click="isEditingLost = !isEditingLost">
+                      <Pencil :size="16" />{{ isEditingLost ? '取消编辑' : '编辑' }}
+                    </button>
+                    <button type="button" class="button button-danger" :disabled="isSavingLost" @click="removeLostDetail">
+                      <Trash2 :size="16" />删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <form v-if="selectedLostItem && isEditingLost" class="card form-card" @submit.prevent="saveLostDetail">
+              <div class="card-header">
+                <h2>编辑失物</h2>
+              </div>
+              <div class="field-grid">
+                <label class="field">
+                  <span>物品名称</span>
+                  <input v-model="editLostForm.itemName" required maxlength="100" />
+                </label>
+                <label class="field">
+                  <span>物品类别</span>
+                  <select v-model="editLostForm.category">
+                    <option v-for="option in categoryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>丢失开始时间</span>
+                  <input v-model="editLostForm.lostTimeStart" required />
+                </label>
+                <label class="field">
+                  <span>丢失结束时间</span>
+                  <input v-model="editLostForm.lostTimeEnd" required />
+                </label>
+                <label class="field span-2">
+                  <span>丢失地点</span>
+                  <input v-model="editLostForm.lostLocation" required maxlength="100" />
+                </label>
+                <label class="field span-2">
+                  <span>物品描述</span>
+                  <textarea v-model="editLostForm.description" maxlength="500" rows="4" />
+                </label>
+                <label class="field span-2">
+                  <span>图片地址</span>
+                  <input v-model="editLostForm.imageUrls" />
+                </label>
+                <label class="switch-row span-2">
+                  <input v-model="editLostForm.subscribeMatch" type="checkbox" />
+                  <span><strong>订阅匹配提醒</strong></span>
+                </label>
+              </div>
+              <button class="button button-primary button-block" type="submit" :disabled="!canSaveLost">
+                {{ isSavingLost ? '保存中' : '保存修改' }}
+              </button>
+            </form>
+          </section>
+
           <section v-else key="profile" class="page-stack">
             <div class="profile-grid">
               <article class="card profile-card">
@@ -910,7 +1131,7 @@ onMounted(async () => {
               </div>
             </div>
             <div class="item-grid">
-              <ItemCard v-for="item in lostItems" :key="item.id" kind="lost" :item="item" />
+              <ItemCard v-for="item in lostItems" :key="item.id" kind="lost" :item="item" interactive @open="openLostDetail(item.id, 'profile')" />
             </div>
             <div v-if="!lostItems.length" class="empty-state">
               <Inbox :size="24" />
@@ -921,7 +1142,7 @@ onMounted(async () => {
       </main>
 
       <nav class="mobile-dock" aria-label="移动端主导航">
-        <span class="dock-indicator" :style="mobileDockIndicatorStyle"></span>
+        <span v-if="showMobileDockIndicator" class="dock-indicator" :style="mobileDockIndicatorStyle"></span>
         <button
           v-for="item in mobileNavItems"
           :key="item.key"

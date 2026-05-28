@@ -7,6 +7,7 @@ from pydantic.alias_generators import to_camel
 VALID_ITEM_CATEGORIES = {"CERT", "ELECTRONIC", "DAILY_USE", "BOOK", "OTHER"}
 VALID_LOST_STATUSES = {"SEARCHING", "FOUND", "CLOSED"}
 VALID_FOUND_STATUSES = {"PENDING", "CLAIMING", "RETURNED", "CLOSED"}
+VALID_REVIEW_STATUSES = {"PENDING", "APPROVED", "REJECTED"}
 VALID_CUSTODY_TYPES = {"SELF", "SECURITY", "OFFICE"}
 VALID_CONTACT_PREFERENCES = {"IN_APP", "PHONE"}
 VALID_BIZ_TYPES = {"LOST", "FOUND", "CLAIM_PROOF", "CERT"}
@@ -81,6 +82,49 @@ class CreateLostItemResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+class UpdateLostItemRequest(BaseModel):
+    item_name: str = Field(..., min_length=1, max_length=100)
+    category: str
+    description: str | None = Field(None, max_length=500)
+    lost_time_start: str
+    lost_time_end: str
+    lost_location: str = Field(..., min_length=1, max_length=100)
+    subscribe_match: bool = False
+    image_urls: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in VALID_ITEM_CATEGORIES:
+            msg = f"category must be one of {VALID_ITEM_CATEGORIES}"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("lost_time_start", "lost_time_end")
+    @classmethod
+    def validate_lost_time_format(cls, v: str, info: ValidationInfo) -> str:
+        _parse_datetime(v, info.field_name or "datetime")
+        return v
+
+    @model_validator(mode="after")
+    def validate_lost_time_range(self) -> "UpdateLostItemRequest":
+        start = _parse_datetime(self.lost_time_start, "lostTimeStart")
+        end = _parse_datetime(self.lost_time_end, "lostTimeEnd")
+        if end < start:
+            msg = "lostTimeEnd must be greater than or equal to lostTimeStart"
+            raise ValueError(msg)
+        return self
+
+    @field_validator("image_urls")
+    @classmethod
+    def validate_image_count(cls, v: list[str]) -> list[str]:
+        if len(v) > 5:
+            msg = "最多上传5张图片"
+            raise ValueError(msg)
+        return v
+
+
 class LostItemListItem(BaseModel):
     id: str
     user_id: str
@@ -91,6 +135,7 @@ class LostItemListItem(BaseModel):
     lost_time_end: str
     lost_location: str
     status: str
+    review_status: str
     cover_image_url: str | None = None
     created_at: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
@@ -107,6 +152,8 @@ class LostItemDetail(BaseModel):
     lost_location: str
     subscribe_match: bool
     status: str
+    review_status: str
+    cover_image_url: str | None = None
     image_urls: list[str] = Field(default_factory=list)
     match_count: int | None = None  # only visible to publisher
     created_at: str
@@ -209,6 +256,7 @@ class FoundItemListItem(BaseModel):
     custody_type: str
     contact_preference: str
     status: str
+    review_status: str
     cover_image_url: str | None = None
     created_at: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
@@ -232,6 +280,7 @@ class FoundItemDetail(BaseModel):
     custody_type: str
     contact_preference: str
     status: str
+    review_status: str
     image_urls: list[str] = Field(default_factory=list)
     verify_questions: list[VerifyQuestionOutput] = Field(default_factory=list)
     has_active_claim: bool = False

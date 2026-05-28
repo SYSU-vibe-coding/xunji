@@ -119,8 +119,8 @@ export function reviewItem(
   bizType: 'LOST' | 'FOUND',
   id: string,
   payload: { action: 'APPROVE' | 'REJECT'; comment?: string },
-): Promise<{ id: string; status: string }> {
-  return adminRequestJson<{ id: string; status: string }>(`/admin/items/${bizType}/${id}/review`, {
+): Promise<{ id: string; status: string; reviewStatus: string }> {
+  return adminRequestJson<{ id: string; status: string; reviewStatus: string }>(`/admin/items/${bizType}/${id}/review`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

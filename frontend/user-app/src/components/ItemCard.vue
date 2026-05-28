@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Clock3, MapPin, ShieldCheck } from 'lucide-vue-next';
+import { Clock3, ImageIcon, MapPin, ShieldCheck } from 'lucide-vue-next';
 
 import {
   categoryLabels,
@@ -15,6 +15,11 @@ const props = defineProps<{
   kind: 'found' | 'lost';
   item: FoundItemSummary | LostItemSummary;
   compact?: boolean;
+  interactive?: boolean;
+}>();
+
+const emit = defineEmits<{
+  open: [];
 }>();
 
 const location = computed(() =>
@@ -32,15 +37,30 @@ const eventTime = computed(() =>
 );
 
 const isSensitive = computed(() => props.kind === 'found' && (props.item as FoundItemSummary).isSensitive);
+
+function openItem() {
+  if (props.interactive) {
+    emit('open');
+  }
+}
 </script>
 
 <template>
-  <article class="item-card" :class="{ compact }">
+  <article
+    class="item-card"
+    :class="{ compact, interactive }"
+    :role="interactive ? 'button' : undefined"
+    :tabindex="interactive ? 0 : undefined"
+    @click="openItem"
+    @keydown.enter.prevent="openItem"
+    @keydown.space.prevent="openItem"
+  >
     <div class="item-media" :class="{ sensitive: isSensitive }">
       <img v-if="item.coverImageUrl" :src="item.coverImageUrl" :alt="item.itemName" />
       <div v-else class="sensitive-mask">
-        <ShieldCheck :size="30" />
-        <span>敏感物品</span>
+        <ShieldCheck v-if="isSensitive" :size="30" />
+        <ImageIcon v-else :size="30" />
+        <span>{{ isSensitive ? '敏感物品' : '暂无图片' }}</span>
       </div>
       <span class="media-badge">{{ dateShort(eventTime) }}</span>
     </div>
@@ -51,7 +71,7 @@ const isSensitive = computed(() => props.kind === 'found' && (props.item as Foun
         <span class="status-badge">{{ statusLabel }}</span>
       </div>
 
-      <p class="item-description">{{ item.description }}</p>
+      <p class="item-description">{{ item.description || '无描述' }}</p>
 
       <div class="item-meta">
         <span><MapPin :size="15" />{{ location }}</span>

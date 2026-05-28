@@ -125,7 +125,7 @@ class AdminService:
             detail=f"物品审核: {req.action}",
         )
         await self._session.commit()
-        return {"id": item_id, "status": result["status"]}
+        return {"id": item_id, "status": result["status"], "reviewStatus": result["reviewStatus"]}
 
     async def list_reports(
         self,

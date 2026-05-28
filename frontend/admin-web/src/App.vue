@@ -555,6 +555,7 @@ onMounted(async () => {
                     <th>类别</th>
                     <th>地点</th>
                     <th>状态</th>
+                    <th>审核</th>
                     <th>举报数</th>
                     <th>操作</th>
                   </tr>
@@ -569,6 +570,7 @@ onMounted(async () => {
                     <td>{{ categoryLabels[record.category] }}</td>
                     <td>{{ record.location }}</td>
                     <td><span class="badge">{{ itemStatusLabel(record) }}</span></td>
+                    <td><span class="badge">{{ reviewStatusLabels[record.reviewStatus] }}</span></td>
                     <td>{{ record.reportCount }}</td>
                     <td>
                       <div class="row-actions">
@@ -587,7 +589,7 @@ onMounted(async () => {
                     <span class="badge">{{ bizTypeLabel(record.bizType) }}</span>
                   </div>
                   <p>{{ categoryLabels[record.category] }} · {{ record.location }}</p>
-                  <p>{{ itemStatusLabel(record) }} · 举报 {{ record.reportCount }}</p>
+                  <p>{{ itemStatusLabel(record) }} · {{ reviewStatusLabels[record.reviewStatus] }} · 举报 {{ record.reportCount }}</p>
                   <div class="row-actions">
                     <button type="button" class="button button-approve" @click="approveContent(record)">通过</button>
                     <button type="button" class="button button-danger" @click="rejectContent(record)">关闭</button>

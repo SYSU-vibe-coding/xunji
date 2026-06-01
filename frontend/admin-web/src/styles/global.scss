@@ -1,0 +1,60 @@
+:root {
+  --xunji-primary: #0d4f4f;
+  --xunji-primary-dark: #083a3a;
+  --xunji-accent: #7c3aed;
+  --xunji-bg: #f4f6f9;
+  --xunji-surface: #ffffff;
+  --xunji-text: #0f172a;
+  --xunji-text-muted: #64748b;
+  --xunji-border: #e2e8f0;
+  --xunji-radius: 12px;
+  --xunji-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --xunji-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+  --xunji-sidebar: #0c2727;
+  --xunji-sidebar-text: #cbd5e1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  color: var(--xunji-text);
+  background: var(--xunji-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+  border-radius: 999px;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.22s ease;
+}
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}

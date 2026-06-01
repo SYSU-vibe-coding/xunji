@@ -349,3 +349,4 @@ onMounted(load);
   }
 }
 </style>
+// lin-hongkuan: 首页、搜索与物品详情

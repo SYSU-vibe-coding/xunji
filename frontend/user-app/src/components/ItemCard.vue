@@ -1,82 +1,150 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Clock3, ImageIcon, MapPin, ShieldCheck } from 'lucide-vue-next';
-
+import { Lock, Picture as PictureIcon } from '@element-plus/icons-vue';
 import {
-  categoryLabels,
-  dateShort,
-  foundStatusLabels,
-  lostStatusLabels,
   type FoundItemSummary,
   type LostItemSummary,
+  categoryLabels,
 } from '@xunji/shared';
 
+import StatusTag from './StatusTag.vue';
+import { shortDateTime } from '@/utils/format';
+
+type Kind = 'found' | 'lost';
+
 const props = defineProps<{
-  kind: 'found' | 'lost';
+  kind: Kind;
   item: FoundItemSummary | LostItemSummary;
-  compact?: boolean;
-  interactive?: boolean;
+  hideStatus?: boolean;
 }>();
 
-const emit = defineEmits<{
-  open: [];
-}>();
+defineEmits<{ open: [id: string, kind: Kind] }>();
+
+const isFound = computed(() => props.kind === 'found');
+const found = computed(() => (isFound.value ? (props.item as FoundItemSummary) : null));
+const lost = computed(() => (isFound.value ? null : (props.item as LostItemSummary)));
 
 const location = computed(() =>
-  props.kind === 'found' ? (props.item as FoundItemSummary).foundLocation : (props.item as LostItemSummary).lostLocation,
+  isFound.value ? found.value!.foundLocation : lost.value!.lostLocation,
 );
-
-const statusLabel = computed(() =>
-  props.kind === 'found'
-    ? foundStatusLabels[(props.item as FoundItemSummary).status]
-    : lostStatusLabels[(props.item as LostItemSummary).status],
+const time = computed(() =>
+  isFound.value ? shortDateTime(found.value!.foundTime) : shortDateTime(lost.value!.lostTimeStart),
 );
-
-const eventTime = computed(() =>
-  props.kind === 'found' ? (props.item as FoundItemSummary).foundTime : (props.item as LostItemSummary).lostTimeStart,
-);
-
-const isSensitive = computed(() => props.kind === 'found' && (props.item as FoundItemSummary).isSensitive);
-
-function openItem() {
-  if (props.interactive) {
-    emit('open');
-  }
-}
+const isSensitive = computed(() => isFound.value && Boolean(found.value?.isSensitive));
+const cover = computed(() => props.item.coverImageUrl);
 </script>
 
 <template>
-  <article
+  <el-card
+    shadow="never"
     class="item-card"
-    :class="{ compact, interactive }"
-    :role="interactive ? 'button' : undefined"
-    :tabindex="interactive ? 0 : undefined"
-    @click="openItem"
-    @keydown.enter.prevent="openItem"
-    @keydown.space.prevent="openItem"
+    :body-style="{ padding: 0 }"
+    @click="$emit('open', item.id, kind)"
   >
-    <div class="item-media" :class="{ sensitive: isSensitive }">
-      <img v-if="item.coverImageUrl" :src="item.coverImageUrl" :alt="item.itemName" />
-      <div v-else class="sensitive-mask">
-        <ShieldCheck v-if="isSensitive" :size="30" />
-        <ImageIcon v-else :size="30" />
-        <span>{{ isSensitive ? '敏感物品' : '暂无图片' }}</span>
+    <div class="cover">
+      <img v-if="cover && !isSensitive" :src="cover" :alt="item.itemName" />
+      <div v-else class="cover-fallback">
+        <el-icon :size="36">
+          <Lock v-if="isSensitive" />
+          <PictureIcon v-else />
+        </el-icon>
+        <span v-if="isSensitive">敏感物品已脱敏</span>
       </div>
-      <span class="media-badge">{{ dateShort(eventTime) }}</span>
-    </div>
-
-    <div class="item-body">
-      <div class="item-title-row">
-        <h3>{{ item.itemName }}</h3>
-        <span class="status-badge">{{ statusLabel }}</span>
-      </div>
-
-      <p class="item-description">{{ item.description || '无描述' }}</p>
-
-      <div class="item-meta">
-        <span><MapPin :size="15" />{{ location }}</span>
-        <span><Clock3 :size="15" />{{ categoryLabels[item.category] }}</span>
+      <div class="badges">
+        <el-tag size="small" effect="dark" round>{{ categoryLabels[item.category] }}</el-tag>
+        <StatusTag
+          v-if="!hideStatus"
+          :variant="kind"
+          :value="item.status"
+        />
       </div>
     </div>
-  </article>
+    <div class="body">
+      <h3>{{ item.itemName }}</h3>
+      <p class="desc">{{ item.description || '暂无描述' }}</p>
+      <div class="meta">
+        <span>📍 {{ location }}</span>
+        <span>🕒 {{ time }}</span>
+      </div>
+    </div>
+  </el-card>
 </template>
+
+<style scoped lang="scss">
+.item-card {
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--xunji-shadow);
+  }
+}
+
+.cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: linear-gradient(135deg, #ecfeff, #e0e7ff);
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cover-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--xunji-text-muted);
+    font-size: 12px;
+  }
+
+  .badges {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 6px;
+  }
+}
+
+.body {
+  padding: 14px 16px 16px;
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--xunji-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .desc {
+    margin: 0 0 10px;
+    color: var(--xunji-text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    color: var(--xunji-text-muted);
+    font-size: 12px;
+  }
+}
+</style>

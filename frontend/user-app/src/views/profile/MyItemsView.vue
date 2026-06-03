@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 
 import EmptyState from '@/components/EmptyState.vue';
 import ItemCard from '@/components/ItemCard.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { deleteLostItem, listFoundItems, listLostItems } from '@/api/item';
 import { ApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
@@ -69,11 +70,12 @@ onMounted(load);
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <span class="eyebrow">My posts</span>
-      <h1>我的发布</h1>
-      <p>编辑、删除你发布过的失物 / 招领</p>
-    </header>
+    <PageHeader
+      eyebrow="My posts"
+      title="我的发布"
+      description="编辑、删除你发布过的失物 / 招领"
+      back-fallback="/profile"
+    />
 
     <el-radio-group v-model="tab" size="large">
       <el-radio-button label="lost">失物 ({{ lostList.length }})</el-radio-button>
@@ -106,23 +108,6 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-.page-header {
-  .eyebrow {
-    color: var(--xunji-text-muted);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  h1 {
-    margin: 6px 0 4px;
-    font-size: 22px;
-  }
-  p {
-    margin: 0;
-    color: var(--xunji-text-muted);
-    font-size: 13px;
-  }
 }
 .grid {
   display: grid;

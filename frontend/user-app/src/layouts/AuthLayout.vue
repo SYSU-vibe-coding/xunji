@@ -160,16 +160,14 @@ import { RouterView } from 'vue-router';
 @media (max-width: 960px) {
   .auth-shell {
     grid-template-columns: 1fr;
+    min-height: 100vh;
   }
   .hero {
-    padding: 28px;
-
-    .hero-copy h1 {
-      font-size: 28px;
-    }
+    display: none;
   }
   .form-area {
-    padding: 16px;
+    min-height: 100vh;
+    padding: 24px 16px calc(env(safe-area-inset-bottom) + 24px);
   }
 }
 </style>

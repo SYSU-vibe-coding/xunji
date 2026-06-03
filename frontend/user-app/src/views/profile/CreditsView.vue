@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { Trophy } from '@element-plus/icons-vue';
 
 import EmptyState from '@/components/EmptyState.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { listMyCreditLogs } from '@/api/credit';
 import { ApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
@@ -38,11 +39,12 @@ onMounted(load);
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <span class="eyebrow">Credits</span>
-      <h1>信誉积分</h1>
-      <p>积分变动记录全程可追溯，奖惩透明公正</p>
-    </header>
+    <PageHeader
+      eyebrow="Credits"
+      title="信誉积分"
+      description="积分变动记录全程可追溯，奖惩透明公正"
+      back-fallback="/profile"
+    />
 
     <el-card shadow="never" class="hero xunji-hero">
       <div class="row">
@@ -96,23 +98,6 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-.page-header {
-  .eyebrow {
-    color: var(--xunji-text-muted);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  h1 {
-    margin: 6px 0 4px;
-    font-size: 22px;
-  }
-  p {
-    margin: 0;
-    color: var(--xunji-text-muted);
-    font-size: 13px;
-  }
 }
 .hero {
   color: #fff;

@@ -59,8 +59,20 @@ async function sendCode() {
 }
 
 async function submit() {
-  const valid = await formRef.value?.validate().catch(() => false);
-  if (!valid) return;
+  if (!formRef.value) {
+    ElMessage.warning('页面尚未就绪，请稍后再试');
+    return;
+  }
+  let valid = false;
+  try {
+    valid = await formRef.value.validate();
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    ElMessage.warning('请完整填写注册信息');
+    return;
+  }
   submitting.value = true;
   try {
     const data = await register(form);
@@ -112,6 +124,7 @@ async function submit() {
         type="primary"
         class="submit"
         size="large"
+        native-type="button"
         :loading="submitting"
         @click="submit"
       >

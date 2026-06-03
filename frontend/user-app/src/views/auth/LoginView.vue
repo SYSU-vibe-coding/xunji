@@ -77,8 +77,20 @@ async function afterLogin() {
 }
 
 async function submitPassword() {
-  const valid = await passwordFormRef.value?.validate().catch(() => false);
-  if (!valid) return;
+  if (!passwordFormRef.value) {
+    ElMessage.warning('页面尚未就绪，请稍后再试');
+    return;
+  }
+  let valid = false;
+  try {
+    valid = await passwordFormRef.value.validate();
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    ElMessage.warning('请完整填写登录信息');
+    return;
+  }
   submitting.value = true;
   try {
     const data = await loginByPassword(passwordForm.phone, passwordForm.password);
@@ -93,8 +105,20 @@ async function submitPassword() {
 }
 
 async function submitSms() {
-  const valid = await smsFormRef.value?.validate().catch(() => false);
-  if (!valid) return;
+  if (!smsFormRef.value) {
+    ElMessage.warning('页面尚未就绪，请稍后再试');
+    return;
+  }
+  let valid = false;
+  try {
+    valid = await smsFormRef.value.validate();
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    ElMessage.warning('请完整填写登录信息');
+    return;
+  }
   submitting.value = true;
   try {
     const data = await loginBySmsCode(smsForm.phone, smsForm.code);
@@ -141,6 +165,7 @@ async function submitSms() {
             type="primary"
             class="submit"
             size="large"
+            native-type="button"
             :loading="submitting"
             @click="submitPassword"
           >
@@ -176,6 +201,7 @@ async function submitSms() {
             type="primary"
             class="submit"
             size="large"
+            native-type="button"
             :loading="submitting"
             @click="submitSms"
           >

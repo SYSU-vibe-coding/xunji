@@ -73,3 +73,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+// lin-hongkuan: AI服务集成

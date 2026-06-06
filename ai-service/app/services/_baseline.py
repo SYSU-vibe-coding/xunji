@@ -1,3 +1,12 @@
+"""Keyword / rule-based baseline. Used when DashScope is unavailable.
+
+This is the canonical fallback path described in
+``docs/architecture/matching-rules.md §2``. It must stay free of network
+calls and external state — it is the last line of defence and runs in CI.
+"""
+
+from __future__ import annotations
+
 import re
 from collections.abc import Iterable
 
@@ -57,11 +66,11 @@ def detect_sensitive(req: DetectSensitiveRequest) -> DetectSensitiveResponse:
 
 def calculate_match(req: CalculateMatchRequest) -> CalculateMatchResponse:
     image_score = 60.0 if req.lost_item.image_urls and req.found_item.image_urls else 0.0
-    text_score = _keyword_overlap(
+    text_score = keyword_overlap(
         [req.lost_item.name, req.lost_item.description],
         [req.found_item.name, req.found_item.description],
     )
-    location_score = _location_score(req.lost_item.location, req.found_item.location)
+    location_score = location_score_value(req.lost_item.location, req.found_item.location)
     time_score = 50.0 if req.lost_item.time and req.found_item.time else 0.0
     total_score = image_score * 0.4 + text_score * 0.3 + location_score * 0.2 + time_score * 0.1
     return CalculateMatchResponse(
@@ -73,16 +82,16 @@ def calculate_match(req: CalculateMatchRequest) -> CalculateMatchResponse:
     )
 
 
-def _combined_text(values: Iterable[str | None]) -> str:
-    return " ".join(value for value in values if value).lower()
+# ---------------------------------------------------------------------------
+# Helpers exported for the DashScope-backed services to reuse.
+# ---------------------------------------------------------------------------
 
 
-def _tokens(values: Iterable[str | None]) -> set[str]:
-    text = _combined_text(values)
-    return {token for token in re.split(r"\W+", text) if token}
+def combined_text(values: Iterable[str | None]) -> str:
+    return _combined_text(values)
 
 
-def _keyword_overlap(left: Iterable[str | None], right: Iterable[str | None]) -> float:
+def keyword_overlap(left: Iterable[str | None], right: Iterable[str | None]) -> float:
     left_tokens = _tokens(left)
     right_tokens = _tokens(right)
     if not left_tokens or not right_tokens:
@@ -90,9 +99,34 @@ def _keyword_overlap(left: Iterable[str | None], right: Iterable[str | None]) ->
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens) * 100
 
 
-def _location_score(left: str | None, right: str | None) -> float:
+def location_score_value(left: str | None, right: str | None) -> float:
     if not left or not right:
         return 0.0
     if left == right:
         return 100.0
     return 60.0 if left[:2] == right[:2] else 0.0
+
+
+def time_score_value(left: str | None, right: str | None) -> float:
+    """matching-rules.md §2: max(0, 100 - |hours_diff| * 2), 0 beyond ~50h."""
+    if not left or not right:
+        return 0.0
+    from datetime import datetime
+
+    parsed = []
+    for raw in (left, right):
+        try:
+            parsed.append(datetime.fromisoformat(raw.replace("Z", "+00:00")))
+        except ValueError:
+            return 50.0  # both present but unparseable → neutral fallback
+    delta_hours = abs((parsed[0] - parsed[1]).total_seconds()) / 3600.0
+    return max(0.0, 100.0 - delta_hours * 2.0)
+
+
+def _combined_text(values: Iterable[str | None]) -> str:
+    return " ".join(value for value in values if value).lower()
+
+
+def _tokens(values: Iterable[str | None]) -> set[str]:
+    text = _combined_text(values)
+    return {token for token in re.split(r"\W+", text) if token}

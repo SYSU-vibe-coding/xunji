@@ -33,9 +33,7 @@ async def calculate_match(
     text_score = max(0.0, _cosine(vectors[0], vectors[1])) * 100.0
 
     image_score = 60.0 if req.lost_item.image_urls and req.found_item.image_urls else 0.0
-    location_score = _baseline.location_score_value(
-        req.lost_item.location, req.found_item.location
-    )
+    location_score = _baseline.location_score_value(req.lost_item.location, req.found_item.location)
     time_score = _baseline.time_score_value(req.lost_item.time, req.found_item.time)
     total = image_score * 0.4 + text_score * 0.3 + location_score * 0.2 + time_score * 0.1
 

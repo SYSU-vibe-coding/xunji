@@ -10,9 +10,7 @@ from app.clients.dashscope import DashScopeClient
 def _embedding_response(vectors: list[list[float]]) -> httpx.Response:
     body = {
         "output": {
-            "embeddings": [
-                {"text_index": idx, "embedding": vec} for idx, vec in enumerate(vectors)
-            ]
+            "embeddings": [{"text_index": idx, "embedding": vec} for idx, vec in enumerate(vectors)]
         },
         "usage": {"total_tokens": 1},
     }
@@ -21,9 +19,7 @@ def _embedding_response(vectors: list[list[float]]) -> httpx.Response:
 
 def _vl_response(text: str) -> httpx.Response:
     body = {
-        "output": {
-            "choices": [{"message": {"role": "assistant", "content": [{"text": text}]}}]
-        }
+        "output": {"choices": [{"message": {"role": "assistant", "content": [{"text": text}]}}]}
     }
     return httpx.Response(200, content=json.dumps(body))
 

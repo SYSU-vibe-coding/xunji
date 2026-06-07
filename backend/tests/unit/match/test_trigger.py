@@ -147,8 +147,6 @@ async def test_trigger_match_unknown_biz_type_is_safe(
     patch_session_factory, session: AsyncSession
 ) -> None:
     fake_client = AsyncMock()
-    written = await match_service.trigger_match(
-        "UNKNOWN", generate_ulid(), ai_client=fake_client
-    )
+    written = await match_service.trigger_match("UNKNOWN", generate_ulid(), ai_client=fake_client)
     assert written == 0
     fake_client.calculate_match.assert_not_awaited()

@@ -24,9 +24,7 @@ def disabled_client() -> DashScopeClient:
 @pytest.mark.asyncio
 async def test_classify_falls_back_when_disabled(disabled_client: DashScopeClient) -> None:
     try:
-        resp = await classify.classify_item(
-            ClassifyItemRequest(itemName="校园卡"), disabled_client
-        )
+        resp = await classify.classify_item(ClassifyItemRequest(itemName="校园卡"), disabled_client)
         assert resp.category == "CERT"
     finally:
         await disabled_client.aclose()

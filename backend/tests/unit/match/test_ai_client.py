@@ -27,9 +27,7 @@ async def test_calculate_match_returns_payload() -> None:
 
     client = AIClient(transport=httpx.MockTransport(handler))
     try:
-        data = await client.calculate_match(
-            lost={"name": "x"}, found={"name": "x"}
-        )
+        data = await client.calculate_match(lost={"name": "x"}, found={"name": "x"})
         assert data is not None
         assert data["totalScore"] == 75
     finally:

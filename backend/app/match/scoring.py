@@ -29,10 +29,7 @@ def rule_based_score(lost: dict[str, Any], found: dict[str, Any]) -> dict[str, f
     location = _location_score(lost.get("location"), found.get("location"))
     time = _time_score(lost.get("time"), found.get("time"))
     total = (
-        image * WEIGHT_IMAGE
-        + text * WEIGHT_TEXT
-        + location * WEIGHT_LOCATION
-        + time * WEIGHT_TIME
+        image * WEIGHT_IMAGE + text * WEIGHT_TEXT + location * WEIGHT_LOCATION + time * WEIGHT_TIME
     )
     return {
         "imageScore": round(image, 2),

@@ -83,6 +83,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-xunji}
       MINIO_SECURE: "false"
+      # Browser-reachable URL of MinIO (host port). Stored URL stays valid
+      # because bucket is set to public-read on first upload.
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:9000}
       TZ: Asia/Shanghai
     depends_on:
       mysql:

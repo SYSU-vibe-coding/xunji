@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     MINIO_URL_EXPIRE_HOURS: int = 168  # 7 days default
     MINIO_SENSITIVE_EXPIRE_HOURS: int = 1  # 1 hour for sensitive
+    # Browser-reachable base URL of MinIO. Bucket should be public-read so that
+    # the URL stored in DB stays valid without re-signing.
+    # Empty -> auto-derive from MINIO_ENDPOINT + MINIO_SECURE.
+    MINIO_PUBLIC_BASE_URL: str = ""
+
+    @property
+    def minio_public_base_url(self) -> str:
+        if self.MINIO_PUBLIC_BASE_URL:
+            return self.MINIO_PUBLIC_BASE_URL.rstrip("/")
+        scheme = "https" if self.MINIO_SECURE else "http"
+        return f"{scheme}://{self.MINIO_ENDPOINT}"
 
     # AI Service
     AI_SERVICE_BASE_URL: str = "http://127.0.0.1:5000"

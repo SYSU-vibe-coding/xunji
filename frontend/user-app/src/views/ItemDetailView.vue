@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Lock, Picture as PictureIcon } from '@element-plus/icons-vue';
+import { Lock, Picture as PictureIcon } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 import StatusTag from '@/components/StatusTag.vue';
@@ -116,10 +116,6 @@ async function submitClaim() {
 
 <template>
   <div class="page">
-    <el-button link @click="router.back()">
-      <el-icon><ArrowLeft /></el-icon> 返回
-    </el-button>
-
     <el-skeleton v-if="loading" :rows="6" animated />
 
     <template v-else-if="detail">

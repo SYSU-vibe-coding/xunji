@@ -130,6 +130,8 @@ class ItemService:
 
     async def list_lost_items(self, query: LostItemQuery) -> dict[str, Any]:
         offset = (query.page_no - 1) * query.page_size
+        # 不显式查 status 时, 默认隐藏已找回 / 已关闭
+        exclude = None if (query.status or query.include_closed) else ["FOUND", "CLOSED"]
         items, total = await self._lost_repo.list_with_filter(
             category=query.category,
             status=query.status,
@@ -138,6 +140,7 @@ class ItemService:
             sort_by=query.sort_by,
             offset=offset,
             limit=query.page_size,
+            exclude_statuses=exclude,
         )
 
         result_list = []
@@ -419,6 +422,8 @@ class ItemService:
 
     async def list_found_items(self, query: FoundItemQuery) -> dict[str, Any]:
         offset = (query.page_no - 1) * query.page_size
+        # 不显式查 status 时, 默认隐藏已归还 / 已关闭
+        exclude = None if (query.status or query.include_closed) else ["RETURNED", "CLOSED"]
         items, total = await self._found_repo.list_with_filter(
             category=query.category,
             status=query.status,
@@ -429,6 +434,7 @@ class ItemService:
             sort_by=query.sort_by,
             offset=offset,
             limit=query.page_size,
+            exclude_statuses=exclude,
         )
 
         result_list = []
@@ -753,8 +759,11 @@ class ItemService:
                     }
                 )
                 client.set_bucket_policy(settings.MINIO_BUCKET, policy)
-            except Exception:  # noqa: BLE001 - non-fatal, just log
-                logger.warning("Failed to set public-read policy on bucket {}", settings.MINIO_BUCKET)
+            except Exception:
+                logger.warning(
+                    "Failed to set public-read policy on bucket {}",
+                    settings.MINIO_BUCKET,
+                )
 
             client.put_object(
                 settings.MINIO_BUCKET,

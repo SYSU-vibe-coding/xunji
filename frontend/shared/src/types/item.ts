@@ -59,6 +59,8 @@ export interface LostItemQuery {
   keyword?: string;
   location?: string;
   sortBy?: SortBy;
+  /** 默认 false：list 接口隐藏 FOUND/CLOSED；显式传 true 才返回历史 */
+  includeClosed?: boolean;
 }
 
 // ---- Found ----
@@ -139,6 +141,8 @@ export interface FoundItemQuery {
   isSensitive?: boolean;
   custodyType?: CustodyType;
   sortBy?: SortBy;
+  /** 默认 false：list 接口隐藏 RETURNED/CLOSED；显式传 true 才返回历史 */
+  includeClosed?: boolean;
 }
 
 // ---- Status & Upload ----

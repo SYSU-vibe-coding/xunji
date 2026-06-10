@@ -20,6 +20,16 @@ export class ApiError extends Error {
   }
 }
 
+const AUTH_ERROR_CODES = new Set<number>([ErrorCode.UNAUTHORIZED, ErrorCode.FORBIDDEN]);
+
+export function isAuthErrorCode(code: number): boolean {
+  return AUTH_ERROR_CODES.has(code);
+}
+
+export function isAuthApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError && isAuthErrorCode(err.code);
+}
+
 export function getStoredToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -70,7 +80,7 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
       if (envelope.code === ErrorCode.SUCCESS) {
         return envelope.data;
       }
-      if (envelope.code === ErrorCode.UNAUTHORIZED) {
+      if (isAuthErrorCode(envelope.code)) {
         clearStoredToken();
         onUnauthorized?.();
       }
@@ -83,13 +93,18 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
     const axiosErr = err as AxiosError<ApiEnvelope<unknown>>;
     const status = axiosErr.response?.status;
     const data = axiosErr.response?.data;
-    if (status === 401) {
+    if (status === 401 || status === 403) {
       clearStoredToken();
       onUnauthorized?.();
     }
     if (data && typeof data === 'object' && 'code' in data && 'message' in data) {
+      const code = (data as ApiEnvelope<unknown>).code;
+      if (isAuthErrorCode(code)) {
+        clearStoredToken();
+        onUnauthorized?.();
+      }
       throw new ApiError(
-        (data as ApiEnvelope<unknown>).code,
+        code,
         (data as ApiEnvelope<unknown>).message,
         (data as ApiEnvelope<unknown>).requestId,
       );

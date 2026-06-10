@@ -4,6 +4,7 @@ import type {
   FoundItemStatus,
   ItemCategory,
   LostItemStatus,
+  ReportHandleStatus,
   ReviewStatus,
   SortBy,
 } from '../enums';
@@ -145,6 +146,10 @@ export interface FoundItemQuery {
   includeClosed?: boolean;
 }
 
+export type UpdateFoundItemRequest = Omit<CreateFoundItemRequest, 'verifyQuestions'> & {
+  verifyQuestions?: VerifyQuestionInput[];
+};
+
 // ---- Status & Upload ----
 
 export interface ChangeItemStatusRequest {
@@ -156,4 +161,16 @@ export interface FileUploadResponse {
   contentType: string;
   size: number;
   uploadedAt: string;
+}
+
+// ---- Report ----
+
+export interface ReportItemRequest {
+  reason: string;
+  description?: string | null;
+}
+
+export interface ReportItemResponse {
+  id: string;
+  handleStatus: ReportHandleStatus;
 }

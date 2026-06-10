@@ -3,8 +3,10 @@ from datetime import timedelta
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.models import Report
 from app.common.utils import now_beijing
 from app.item.models import FoundItem, ItemImage, LostItem, VerifyQuestion
+from app.match.models import MatchResult
 
 
 class LostItemRepository:
@@ -27,6 +29,7 @@ class LostItemRepository:
         status: str | None = None,
         keyword: str | None = None,
         location: str | None = None,
+        user_id: str | None = None,
         sort_by: str = "CREATED_DESC",
         offset: int = 0,
         limit: int = 10,
@@ -52,6 +55,9 @@ class LostItemRepository:
         if location:
             stmt = stmt.where(LostItem.lost_location.like(f"%{location}%"))
             count_stmt = count_stmt.where(LostItem.lost_location.like(f"%{location}%"))
+        if user_id:
+            stmt = stmt.where(LostItem.user_id == user_id)
+            count_stmt = count_stmt.where(LostItem.user_id == user_id)
 
         if sort_by == "CREATED_ASC":
             stmt = stmt.order_by(LostItem.created_at.asc())
@@ -102,6 +108,13 @@ class LostItemRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def count_matches(self, item_id: str) -> int:
+        stmt = (
+            select(func.count()).select_from(MatchResult).where(MatchResult.lost_item_id == item_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar() or 0
+
 
 class FoundItemRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -123,6 +136,7 @@ class FoundItemRepository:
         status: str | None = None,
         keyword: str | None = None,
         location: str | None = None,
+        user_id: str | None = None,
         is_sensitive: bool | None = None,
         custody_type: str | None = None,
         sort_by: str = "CREATED_DESC",
@@ -150,6 +164,9 @@ class FoundItemRepository:
         if location:
             stmt = stmt.where(FoundItem.found_location.like(f"%{location}%"))
             count_stmt = count_stmt.where(FoundItem.found_location.like(f"%{location}%"))
+        if user_id:
+            stmt = stmt.where(FoundItem.user_id == user_id)
+            count_stmt = count_stmt.where(FoundItem.user_id == user_id)
         if is_sensitive is not None:
             val = 1 if is_sensitive else 0
             stmt = stmt.where(FoundItem.is_sensitive == val)
@@ -245,3 +262,41 @@ class VerifyQuestionRepository:
         stmt = select(VerifyQuestion).where(VerifyQuestion.found_item_id == found_item_id)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def delete_by_found_item(self, found_item_id: str) -> None:
+        questions = await self.get_by_found_item(found_item_id)
+        for question in questions:
+            await self._session.delete(question)
+        await self._session.flush()
+
+
+class ItemReportRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, report: Report) -> Report:
+        self._session.add(report)
+        await self._session.flush()
+        return report
+
+    async def exists_by_reporter_and_target(
+        self, *, reporter_id: str, target_type: str, target_id: str
+    ) -> bool:
+        stmt = select(Report.id).where(
+            Report.reporter_id == reporter_id,
+            Report.target_type == target_type,
+            Report.target_id == target_id,
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def count_by_targets(self, target_type: str, target_ids: list[str]) -> dict[str, int]:
+        if not target_ids:
+            return {}
+        stmt = (
+            select(Report.target_id, func.count())
+            .where(Report.target_type == target_type, Report.target_id.in_(target_ids))
+            .group_by(Report.target_id)
+        )
+        result = await self._session.execute(stmt)
+        return {target_id: count for target_id, count in result.all()}

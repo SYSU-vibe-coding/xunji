@@ -18,6 +18,13 @@ import type {
 
 import { http } from './http';
 
+type ItemBizType = 'LOST' | 'FOUND';
+type ItemBizTypePath = 'lost' | 'found';
+
+function toItemBizTypePath(bizType: ItemBizType): ItemBizTypePath {
+  return bizType.toLowerCase() as ItemBizTypePath;
+}
+
 export function getDashboard() {
   return http.get<DashboardStats>('/admin/dashboard');
 }
@@ -45,9 +52,9 @@ export function listItemReviews(query: ItemReviewQuery = {}) {
   );
 }
 
-export function reviewItem(bizType: 'LOST' | 'FOUND', id: string, payload: ReviewRequest) {
+export function reviewItem(bizType: ItemBizType, id: string, payload: ReviewRequest) {
   return http.post<{ id: string; status: string; reviewStatus: string }>(
-    `/admin/items/${bizType}/${id}/review`,
+    `/admin/items/${toItemBizTypePath(bizType)}/${id}/review`,
     payload,
   );
 }

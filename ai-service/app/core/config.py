@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     DASHSCOPE_VL_MODEL: str = "qwen-vl-max"
     # Per-request timeout for outbound calls. Keep short — main backend gives
     # us a 3s budget total.
-    DASHSCOPE_TIMEOUT: float = 8.0
+    DASHSCOPE_TIMEOUT: float = 2.5
 
     @property
     def use_dashscope(self) -> bool:

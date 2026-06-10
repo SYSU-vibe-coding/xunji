@@ -1,4 +1,6 @@
-import type { ItemCategory, MatchStatus } from '../enums';
+import type { BizType, ItemCategory, MatchStatus } from '../enums';
+
+export type MatchBizType = Extract<BizType, 'LOST' | 'FOUND'>;
 
 /**
  * Match 模块后端 router 暂未实现（见 docs/architecture/matching-rules.md）。
@@ -23,13 +25,31 @@ export interface MatchSummary {
     time: string;
   };
   createdAt: string;
+  canClaim?: boolean;
+}
+
+export interface MatchDetail extends MatchSummary {
   canClaim: boolean;
+  lostItem: Record<string, unknown>;
+  foundItem: Record<string, unknown>;
 }
 
 export interface MatchQuery {
+  bizType: MatchBizType;
+  bizId: string;
   pageNo?: number;
   pageSize?: number;
-  lostItemId?: string;
-  foundItemId?: string;
-  matchStatus?: MatchStatus;
+  minScore?: number;
+  status?: MatchStatus;
+}
+
+export interface MatchRecalculateRequest {
+  bizType: MatchBizType;
+  bizId: string;
+}
+
+export interface MatchRecalculateResponse {
+  taskId: string;
+  estimatedCount: number;
+  status?: string;
 }

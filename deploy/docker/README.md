@@ -57,12 +57,13 @@ Default ports:
 
 - User app: `http://localhost:18080`
 - Admin web: `http://localhost:18081`
+- Backend health: `http://localhost:8080/health`
 - Backend docs: `http://localhost:8080/docs`
 - AI health: `http://localhost:5000/health`
 - MySQL: `localhost:3306`
 - MinIO console: `http://localhost:9001`
 
-The MySQL container initializes an empty schema from `backend/sql/schema.sql` on first volume creation. The backend creates the default administrator from `ADMIN_ACCOUNT`, `ADMIN_PASSWORD`, and `ADMIN_PHONE`. To reset local data:
+The MySQL container initializes an empty schema from `backend/sql/schema.sql` on first volume creation. The backend creates the default administrator from `ADMIN_ACCOUNT`, `ADMIN_PASSWORD`, and `ADMIN_PHONE`. Replace the default `JWT_SECRET_KEY` and `ADMIN_PASSWORD` before shared or production deployments; the backend logs a startup warning when they are unchanged. To reset local data:
 
 ```bash
 docker compose -f deploy/docker/docker-compose.yml down -v

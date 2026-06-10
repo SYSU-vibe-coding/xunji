@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 import StatusTag from '@/components/StatusTag.vue';
 import { listItemReviews, reviewItem } from '@/api/admin';
-import { ApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import {
   type ItemReviewRecord,
   categoryLabels,
 } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
 
+const route = useRoute();
+
+function normalizeBizType(value: unknown): 'LOST' | 'FOUND' | '' {
+  if (value === 'lost' || value === 'LOST') return 'LOST';
+  if (value === 'found' || value === 'FOUND') return 'FOUND';
+  return '';
+}
+
 const list = ref<ItemReviewRecord[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = 10;
-const bizType = ref<'LOST' | 'FOUND' | ''>('');
+const bizType = ref<'LOST' | 'FOUND' | ''>(normalizeBizType(route.query.bizType));
 const loading = ref(true);
 
 async function load() {
@@ -29,7 +38,7 @@ async function load() {
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
     list.value = [];
     total.value = 0;
   } finally {
@@ -67,6 +76,15 @@ watch(bizType, () => {
   page.value = 1;
   void load();
 });
+
+watch(
+  () => route.query.bizType,
+  (value) => {
+    const next = normalizeBizType(value);
+    if (next === bizType.value) return;
+    bizType.value = next;
+  },
+);
 
 onMounted(load);
 </script>

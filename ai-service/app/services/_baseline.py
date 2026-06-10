@@ -65,13 +65,13 @@ def detect_sensitive(req: DetectSensitiveRequest) -> DetectSensitiveResponse:
 
 
 def calculate_match(req: CalculateMatchRequest) -> CalculateMatchResponse:
-    image_score = 60.0 if req.lost_item.image_urls and req.found_item.image_urls else 0.0
+    image_score = image_score_value(req.lost_item.image_urls, req.found_item.image_urls)
     text_score = keyword_overlap(
         [req.lost_item.name, req.lost_item.description],
         [req.found_item.name, req.found_item.description],
     )
     location_score = location_score_value(req.lost_item.location, req.found_item.location)
-    time_score = 50.0 if req.lost_item.time and req.found_item.time else 0.0
+    time_score = time_score_value(req.lost_item.time, req.found_item.time)
     total_score = image_score * 0.4 + text_score * 0.3 + location_score * 0.2 + time_score * 0.1
     return CalculateMatchResponse(
         image_score=round(image_score, 2),
@@ -105,6 +105,10 @@ def location_score_value(left: str | None, right: str | None) -> float:
     if left == right:
         return 100.0
     return 60.0 if left[:2] == right[:2] else 0.0
+
+
+def image_score_value(left: list[str] | None, right: list[str] | None) -> float:
+    return 30.0 if left and right else 0.0
 
 
 def time_score_value(left: str | None, right: str | None) -> float:

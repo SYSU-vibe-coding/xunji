@@ -4,11 +4,14 @@ import { useRoute, useRouter } from 'vue-router';
 import { Lock, Picture as PictureIcon } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
+import ImageUploader from '@/components/ImageUploader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import {
+  changeLostItemStatus,
   deleteLostItem,
   getFoundItem,
   getLostItem,
+  reportItem,
 } from '@/api/item';
 import { createClaim } from '@/api/claim';
 import { ApiError } from '@/api/http';
@@ -35,9 +38,14 @@ const loading = ref(true);
 
 const claimDialog = ref(false);
 const claimAnswers = reactive<Record<string, string>>({});
+const claimProofImageUrls = ref<string[]>([]);
 const claimSubmitting = ref(false);
+const reportDialog = ref(false);
+const reportForm = reactive({ reason: '', description: '' });
+const reportSubmitting = ref(false);
 
 const isFound = computed(() => bizType.value === 'found');
+const backendBizType = computed(() => (isFound.value ? 'FOUND' : 'LOST'));
 const detail = computed(() => (isFound.value ? foundDetail.value : lostDetail.value));
 const isOwner = computed(() => detail.value?.userId === auth.profile?.id);
 const itemName = computed(() => detail.value?.itemName ?? '物品详情');
@@ -83,12 +91,30 @@ async function handleDelete() {
   }
 }
 
+async function changeLostStatus(status: 'FOUND' | 'CLOSED') {
+  if (!lostDetail.value) return;
+  const label = status === 'FOUND' ? '标记为已找回' : '关闭';
+  try {
+    await ElMessageBox.confirm(`确认${label}这条失物信息吗？`, label, { type: 'warning' });
+  } catch {
+    return;
+  }
+  try {
+    await changeLostItemStatus(lostDetail.value.id, { status });
+    ElMessage.success('状态已更新');
+    await load();
+  } catch (err) {
+    ElMessage.error(err instanceof ApiError ? err.message : '状态更新失败');
+  }
+}
+
 function openClaim() {
   if (!foundDetail.value) return;
   if (foundDetail.value.userId === auth.profile?.id) {
     ElMessage.warning('不能认领自己发布的招领');
     return;
   }
+  claimProofImageUrls.value = [];
   claimDialog.value = true;
 }
 
@@ -100,8 +126,10 @@ async function submitClaim() {
   claimSubmitting.value = true;
   try {
     const result = await createClaim({
+      matchId: typeof route.query.matchId === 'string' ? route.query.matchId : null,
       foundItemId: foundDetail.value.id,
       answers,
+      proofImageUrls: claimProofImageUrls.value,
     });
     ElMessage.success('认领申请已提交');
     claimDialog.value = false;
@@ -111,6 +139,46 @@ async function submitClaim() {
   } finally {
     claimSubmitting.value = false;
   }
+}
+
+function openReport() {
+  if (!detail.value) return;
+  if (isOwner.value) {
+    ElMessage.warning('不能举报自己发布的物品');
+    return;
+  }
+  reportForm.reason = '';
+  reportForm.description = '';
+  reportDialog.value = true;
+}
+
+async function submitReport() {
+  if (!detail.value) return;
+  if (!reportForm.reason.trim()) {
+    ElMessage.warning('请填写举报原因');
+    return;
+  }
+  reportSubmitting.value = true;
+  try {
+    await reportItem(backendBizType.value, detail.value.id, {
+      reason: reportForm.reason.trim(),
+      description: reportForm.description.trim() || null,
+    });
+    ElMessage.success('举报已提交');
+    reportDialog.value = false;
+  } catch (err) {
+    ElMessage.error(err instanceof ApiError ? err.message : '提交举报失败');
+  } finally {
+    reportSubmitting.value = false;
+  }
+}
+
+function goMatches() {
+  if (!detail.value) return;
+  void router.push({
+    name: 'matches',
+    query: { bizType: backendBizType.value, bizId: detail.value.id },
+  });
 }
 </script>
 
@@ -164,6 +232,8 @@ async function submitClaim() {
             </el-descriptions>
 
             <div class="actions">
+              <el-button v-if="isOwner" @click="goMatches">查看匹配</el-button>
+              <el-button v-else plain @click="openReport">举报</el-button>
               <template v-if="isFound">
                 <el-button
                   type="primary"
@@ -175,7 +245,23 @@ async function submitClaim() {
                 </el-button>
               </template>
               <template v-else-if="isOwner">
-                <el-button @click="router.push('/profile/items')">编辑 / 删除</el-button>
+                <el-button @click="router.push('/profile/items')">编辑</el-button>
+                <el-button
+                  type="success"
+                  plain
+                  :disabled="lostDetail!.status !== 'SEARCHING'"
+                  @click="changeLostStatus('FOUND')"
+                >
+                  标记已找回
+                </el-button>
+                <el-button
+                  type="warning"
+                  plain
+                  :disabled="lostDetail!.status !== 'SEARCHING'"
+                  @click="changeLostStatus('CLOSED')"
+                >
+                  关闭
+                </el-button>
                 <el-button type="danger" plain @click="handleDelete">删除</el-button>
               </template>
             </div>
@@ -213,10 +299,38 @@ async function submitClaim() {
         :closable="false"
         title="该招领无验证问题，提交后等待发布者人工核对"
       />
+      <el-form label-position="top" class="proof-form">
+        <el-form-item label="凭证图片">
+          <ImageUploader v-model="claimProofImageUrls" biz-type="CLAIM_PROOF" :max="5" />
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="claimDialog = false">取消</el-button>
         <el-button type="primary" :loading="claimSubmitting" @click="submitClaim">
           提交认领
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="reportDialog" title="举报物品" width="480px" :close-on-click-modal="false">
+      <el-form label-position="top">
+        <el-form-item label="举报原因" required>
+          <el-input v-model="reportForm.reason" maxlength="100" placeholder="例如：虚假发布、信息不实" />
+        </el-form-item>
+        <el-form-item label="详细说明">
+          <el-input
+            v-model="reportForm.description"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reportDialog = false">取消</el-button>
+        <el-button type="primary" :loading="reportSubmitting" @click="submitReport">
+          提交举报
         </el-button>
       </template>
     </el-dialog>

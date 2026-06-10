@@ -1,7 +1,11 @@
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
+
+Category = Literal["CERT", "ELECTRONIC", "DAILY_USE", "BOOK", "OTHER"]
+SensitiveType = Literal["ID_CARD", "BANK_CARD", "CAMPUS_CARD", "OTHER"]
+Score = Annotated[float, Field(ge=0.0, le=100.0)]
 
 VALID_CATEGORIES = {"CERT", "ELECTRONIC", "DAILY_USE", "BOOK", "OTHER"}
 
@@ -21,9 +25,9 @@ class ClassifyItemRequest(BaseModel):
 
 
 class ClassifyItemResponse(BaseModel):
-    category: str
+    category: Category
     tags: list[str]
-    confidence: float
+    confidence: Score
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
@@ -34,7 +38,7 @@ class DetectSensitiveRequest(BaseModel):
 
 class DetectSensitiveResponse(BaseModel):
     is_sensitive: bool
-    sensitive_type: str | None = None
+    sensitive_type: SensitiveType | None = None
     masked_image_url: str | None = None
     recognized_fields: dict[str, Any] | None = None
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -56,9 +60,9 @@ class CalculateMatchRequest(BaseModel):
 
 
 class CalculateMatchResponse(BaseModel):
-    image_score: float
-    text_score: float
-    location_score: float
-    time_score: float
-    total_score: float
+    image_score: Score
+    text_score: Score
+    location_score: Score
+    time_score: Score
+    total_score: Score
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

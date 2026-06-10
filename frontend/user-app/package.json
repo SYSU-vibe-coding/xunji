@@ -8,7 +8,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "lint": "vue-tsc --noEmit",
-    "test:unit": "vitest --passWithNoTests"
+    "test:unit": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

@@ -12,7 +12,7 @@ import {
 } from '@element-plus/icons-vue';
 
 import { getDashboard, listCertifications, listReports } from '@/api/admin';
-import { ApiError } from '@/api/http';
+import { isAuthApiError } from '@/api/http';
 import StatusTag from '@/components/StatusTag.vue';
 import type { CertificationReview, DashboardStats, ReportRecord } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
@@ -35,7 +35,7 @@ async function load() {
     pendingCerts.value = c.list;
     pendingReports.value = r.list;
   } catch (err) {
-    if (err instanceof ApiError && err.code === 40002) return;
+    if (isAuthApiError(err)) return;
   } finally {
     loading.value = false;
   }

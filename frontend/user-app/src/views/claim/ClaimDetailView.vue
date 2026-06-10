@@ -74,7 +74,7 @@ async function handleReview(action: 'APPROVE' | 'REJECT') {
       const result = await ElMessageBox.prompt('请输入驳回原因', '驳回认领', {
         confirmButtonText: '提交驳回',
         cancelButtonText: '取消',
-        inputValidator: (v) => (v && v.trim().length > 0) || '驳回必须填写原因',
+        inputValidator: (v: string) => (v && v.trim().length > 0) || '驳回必须填写原因',
       });
       comment = result.value;
     } catch {

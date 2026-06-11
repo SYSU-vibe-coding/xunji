@@ -231,6 +231,8 @@ class UserService:
             action="CREATE",
             detail=f"实名认证状态变更: {old_status} -> PENDING",
         )
+        await self._session.flush()
+        await self._session.refresh(cert_request)
         await self._session.commit()
         return self._to_cert_response(cert_request, user.real_name)
 

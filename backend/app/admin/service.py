@@ -11,6 +11,7 @@ from app.admin.schemas import (
     ReviewRequest,
     UserStatusRequest,
 )
+from app.claim.service import ClaimService
 from app.common.errors import BizError, ErrorCode
 from app.common.pagination import PaginationParams, paginate
 from app.common.utils import format_beijing
@@ -30,6 +31,7 @@ class AdminService:
         self._announcement_repo = AnnouncementRepository(session)
         self._user_svc = UserService(session)
         self._item_svc = ItemService(session)
+        self._claim_svc = ClaimService(session)
         self._credit_svc = CreditService(session)
         self._notification_svc = NotificationService(session)
         self._log_svc = OperationLogService(session)
@@ -236,13 +238,20 @@ class AdminService:
             handle_status="PENDING", target_type=None, offset=0, limit=1
         )
         _, pending_certs = await self._user_svc.list_certifications_internal("PENDING", 0, 1)
+        handover_stats = await self._claim_svc.get_handover_stats_internal()
+        total_items = total_lost + total_found
+        recovery_rate = (
+            round(handover_stats["handedOverCount"] / total_items * 100, 2)
+            if total_items
+            else 0
+        )
         return {
             "totalUsers": total_users,
             "totalLost": total_lost,
             "totalFound": total_found,
-            "handedOverCount": 0,
-            "recoveryRate": 0,
-            "avgHandleHours": 0,
+            "handedOverCount": handover_stats["handedOverCount"],
+            "recoveryRate": recovery_rate,
+            "avgHandleHours": handover_stats["avgHandleHours"],
             "pendingCertifications": pending_certs,
             "pendingReports": pending_reports,
         }

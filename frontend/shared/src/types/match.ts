@@ -2,10 +2,6 @@ import type { BizType, ItemCategory, MatchStatus } from '../enums';
 
 export type MatchBizType = Extract<BizType, 'LOST' | 'FOUND'>;
 
-/**
- * Match 模块后端 router 暂未实现（见 docs/architecture/matching-rules.md）。
- * 前端先行定义类型与 API 路径占位。
- */
 export interface MatchSummary {
   matchId: string;
   lostItemId: string;

@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.claim.models import ClaimAnswer, ClaimRequest, HandoverRecord
+from app.item.models import FoundItem
 
 ACTIVE_CLAIM_STATUSES = {"PENDING", "ANSWER_PASSED", "PROOF_PENDING", "APPROVED", "APPEALING"}
 
@@ -82,6 +85,14 @@ class ClaimRequestRepository:
         await self._session.flush()
         return claim
 
+    async def count_by_status(self, status: str) -> int:
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(ClaimRequest)
+            .where(ClaimRequest.review_status == status)
+        )
+        return result.scalar() or 0
+
 
 class ClaimAnswerRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -119,3 +130,17 @@ class HandoverRecordRepository:
         await self._session.merge(handover)
         await self._session.flush()
         return handover
+
+    async def list_completed_item_times(self) -> list[tuple[datetime, datetime]]:
+        result = await self._session.execute(
+            select(FoundItem.created_at, HandoverRecord.completed_at)
+            .select_from(HandoverRecord)
+            .join(ClaimRequest, ClaimRequest.id == HandoverRecord.claim_id)
+            .join(FoundItem, FoundItem.id == ClaimRequest.found_item_id)
+            .where(HandoverRecord.completed_at.is_not(None))
+        )
+        return [
+            (created_at, completed_at)
+            for created_at, completed_at in result.all()
+            if completed_at is not None
+        ]

@@ -462,6 +462,19 @@ class ClaimService:
             raise BizError(ErrorCode.PARAM_ERROR, f"Invalid reviewStatus: {invalid}")
         return statuses
 
+    async def get_handover_stats_internal(self) -> dict[str, float | int]:
+        handed_over_count = await self._claim_repo.count_by_status("HANDED_OVER")
+        completed_times = await self._handover_repo.list_completed_item_times()
+        durations = [
+            (completed_at - created_at).total_seconds() / 3600
+            for created_at, completed_at in completed_times
+        ]
+        avg_handle_hours = sum(durations) / len(durations) if durations else 0
+        return {
+            "handedOverCount": handed_over_count,
+            "avgHandleHours": round(avg_handle_hours, 2),
+        }
+
     async def _to_detail(self, claim: ClaimRequest) -> ClaimDetailResponse:
         answers = [
             ClaimAnswerOutput(

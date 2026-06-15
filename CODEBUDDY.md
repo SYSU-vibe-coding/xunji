@@ -16,7 +16,7 @@ This file provides guidance to CodeBuddy Code when working with code in this rep
 - **数据层** MySQL + MinIO
 - **部署** `deploy/` — docker-compose、环境模板、脚本
 
-**重要**：当前仓库只提交了少量占位文件。以 `backend/` 为例，目前只有 `pyproject.toml` 和 `README.md`；`app/`、`alembic/`、`tests/`、`uv.lock` 尚未入库。下面的目录结构和命令是初始化/补脚手架时必须遵循的约定，不代表这些文件现在已经存在。
+**当前状态**：仓库已落地可演示的 P0/P1 主体实现，不再是占位脚手架。`backend/app/`、`backend/alembic/`、`backend/tests/`、`ai-service/app/`、双前端 Vue 应用、Docker Compose 和 CI 都已入库。继续开发时应优先在现有结构内补功能、修测试和更新文档，避免重新搭脚手架。
 
 ## 按任务读文档
 
@@ -32,11 +32,9 @@ This file provides guidance to CodeBuddy Code when working with code in this rep
 | 新增/修改枚举或错误码 | `docs/architecture/enums.md` + `docs/api/conventions.md` |
 | 判断需求是否在范围内 | `docs/project-management/requirements-baseline.md` |
 
-## 常用命令（脚手架落库后执行；初始化时遵循此约定）
+## 常用命令
 
 ### 主后端（`backend/`，FastAPI + uv）
-
-若当前还没有 `app/`、`alembic/` 或 `tests/`，先按本文后面的“后端目标包结构”补齐脚手架，再执行启动 / 迁移 / 测试命令。
 
 ```bash
 cd backend
@@ -65,8 +63,6 @@ uv run mypy app                                          # 类型检查
 ```
 
 ### AI 服务（`ai-service/`，FastAPI + uv）
-
-若 `ai-service/` 仍只有占位 `README`，先按 `docs/architecture/module-design.md §5.2` 搭骨架，再执行下列命令。
 
 ```bash
 cd ai-service
@@ -128,7 +124,7 @@ docker compose up -d                # 启动全部服务
 - **敏感物品分层展示**：`found_items.is_sensitive = 1` 的物品前端**只**返回 `masked_image_url`，原图仅 ADMIN 和归属方可访问，对象存储 URL 签名有效期压到 1 小时。
 - **信誉积分双写**：积分变动必须与业务状态在同一事务内写入，并同步落 `credit_logs`，去重依赖 `(user_id, biz_type, biz_id, reason_code)` 唯一索引（`credit-rules.md §5`）。
 
-## 后端目标包结构（初始化完成后）
+## 后端包结构
 
 ```
 backend/

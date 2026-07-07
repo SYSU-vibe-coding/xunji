@@ -95,8 +95,8 @@ async function saveInterval() {
   }
 }
 
-function onIntervalInput(v: number) {
-  intervalInput.value = v;
+function onIntervalInput(v: number | undefined) {
+  intervalInput.value = v ?? 0;
   intervalTouched.value = true;
 }
 

@@ -1,0 +1,157 @@
+import asyncio
+from collections.abc import AsyncGenerator
+
+import pytest
+from app.core.auth import create_access_token
+from app.db.base import Base
+from app.db.session import get_session
+from app.main import create_app
+from app.user.models import User
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+# In-memory SQLite for tests
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+engine = create_async_engine(TEST_DB_URL, echo=False)
+TestSessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(autouse=True)
+async def setup_db():
+    """Create tables before each test, drop after."""
+    import app.admin.models
+    import app.claim.models
+    import app.credit.models
+    import app.item.models
+    import app.match.models
+    import app.notification.models
+    import app.operation_log.models
+    import app.user.models  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture
+async def session() -> AsyncGenerator[AsyncSession, None]:
+    async with TestSessionFactory() as s:
+        yield s
+
+
+@pytest.fixture
+async def seeded_users(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            User(
+                id="01TESTUSER000000000000001",
+                phone="13810000001",
+                password_hash="",
+                nickname="测试用户",
+                role="USER",
+                cert_status="UNVERIFIED",
+                credit_score=100,
+                status="ACTIVE",
+            ),
+            User(
+                id="01TESTADMIN00000000000001",
+                phone="13810000002",
+                password_hash="",
+                nickname="测试管理员",
+                role="ADMIN",
+                cert_status="APPROVED",
+                credit_score=100,
+                status="ACTIVE",
+            ),
+            User(
+                id="01TESTSTAFF00000000000001",
+                phone="13810000003",
+                password_hash="",
+                nickname="测试员工",
+                role="STAFF",
+                cert_status="APPROVED",
+                credit_score=100,
+                status="ACTIVE",
+            ),
+        ]
+    )
+    await session.commit()
+
+
+@pytest.fixture
+async def client(session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    app = create_app()
+
+    async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
+        yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture
+def user_token() -> str:
+    """JWT for a test user."""
+    return create_access_token(
+        {"sub": "01TESTUSER000000000000001", "role": "USER", "status": "ACTIVE"}
+    )
+
+
+@pytest.fixture
+def admin_token() -> str:
+    """JWT for a test admin."""
+    return create_access_token(
+        {"sub": "01TESTADMIN00000000000001", "role": "ADMIN", "status": "ACTIVE"}
+    )
+
+
+@pytest.fixture
+def staff_token() -> str:
+    """JWT for a test staff user."""
+    return create_access_token(
+        {"sub": "01TESTSTAFF00000000000001", "role": "STAFF", "status": "ACTIVE"}
+    )
+
+
+@pytest.fixture
+def auth_headers(seeded_users: None, user_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {user_token}"}
+
+
+@pytest.fixture
+def admin_headers(seeded_users: None, admin_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
+@pytest.fixture
+def staff_headers(seeded_users: None, staff_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {staff_token}"}
+
+
+@pytest.fixture(autouse=True)
+def _disable_match_background_tasks(monkeypatch):
+    """The item create endpoints schedule trigger_match in BackgroundTasks.
+    During tests we don't want that fanning out to real MySQL — replace the
+    helpers with no-ops. Tests that exercise trigger_match itself import the
+    function directly and patch async_session_factory, so they aren't affected.
+    """
+
+    async def _noop(item_id: str) -> None:  # pragma: no cover
+        return None
+
+    import app.item.service as item_service
+
+    monkeypatch.setattr(item_service, "_trigger_match_for_lost", _noop)
+    monkeypatch.setattr(item_service, "_trigger_match_for_found", _noop)

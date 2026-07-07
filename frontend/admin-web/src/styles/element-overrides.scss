@@ -1,0 +1,46 @@
+// 与用户端共用品牌色：深青 + 紫色点缀
+:root {
+  --el-color-primary: #0d4f4f;
+  --el-color-primary-light-3: #3d7676;
+  --el-color-primary-light-5: #6e9d9d;
+  --el-color-primary-light-7: #9ec4c4;
+  --el-color-primary-light-8: #b6d6d6;
+  --el-color-primary-light-9: #cfe5e5;
+  --el-color-primary-dark-2: #083a3a;
+
+  --el-color-success: #14b8a6;
+  --el-color-success-light-3: #4dcabf;
+  --el-color-success-light-5: #81dbd2;
+  --el-color-success-light-7: #b6ece5;
+  --el-color-success-light-8: #d0f3ee;
+  --el-color-success-light-9: #e7f9f6;
+  --el-color-success-dark-2: #0d8b7d;
+
+  --el-color-warning: #f59e0b;
+  --el-color-warning-light-3: #f8b542;
+  --el-color-warning-light-5: #facb78;
+  --el-color-warning-light-7: #fce0ae;
+  --el-color-warning-light-8: #fdebc6;
+  --el-color-warning-light-9: #fef5e0;
+  --el-color-warning-dark-2: #b97608;
+
+  --el-color-danger: #ef4444;
+  --el-color-danger-light-3: #f37272;
+  --el-color-danger-light-5: #f7a0a0;
+  --el-color-danger-light-7: #facece;
+  --el-color-danger-light-8: #fce0e0;
+  --el-color-danger-light-9: #fdf0f0;
+  --el-color-danger-dark-2: #b32f2f;
+  --el-color-error: var(--el-color-danger);
+
+  --el-color-info: #6b7280;
+  --el-color-info-light-3: #8e95a0;
+  --el-color-info-light-5: #b0b6c0;
+  --el-color-info-light-7: #d3d6dd;
+  --el-color-info-light-8: #e3e5ea;
+  --el-color-info-light-9: #f1f2f5;
+  --el-color-info-dark-2: #4a525e;
+
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 6px;
+}

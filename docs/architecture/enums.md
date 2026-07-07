@@ -22,7 +22,7 @@
 ### UserStatus（`users.status`）
 `ACTIVE` / `DISABLED` / `CANCELLED`
 
-### ReviewStatus（认证申请 / 内容审核通用）
+### ReviewStatus（认证申请 / 失物招领内容审核通用）
 `PENDING` / `APPROVED` / `REJECTED`
 
 ## 物品
@@ -58,7 +58,7 @@
 `IN_APP` / `PHONE`
 
 ### BizType（`item_images.biz_type` / 通用业务类型）
-`LOST` / `FOUND` / `CLAIM_PROOF` / `CERT`
+`LOST` / `FOUND` / `CLAIM_PROOF` / `CERT` / `USER` / `CLAIM` / `REPORT` / `ANNOUNCEMENT`
 
 ## 匹配与认领
 
@@ -100,6 +100,9 @@
 | HANDOVER_REMINDER | 交接提醒 |
 | CREDIT_CHANGED | 积分变动 |
 | SYSTEM_ANNOUNCEMENT | 系统公告 |
+
+### NotificationPriority（`notifications.priority`）
+`NORMAL` / `HIGH`
 
 ## 积分
 

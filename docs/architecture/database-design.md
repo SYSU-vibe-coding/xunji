@@ -79,6 +79,7 @@
 | lost_location | varchar(255) | 丢失地点 |
 | subscribe_match | tinyint | 是否订阅匹配 |
 | status | varchar(20) | 见 `enums.md` LostItemStatus |
+| review_status | varchar(20) | 见 `enums.md` ReviewStatus；失物内容审核状态 |
 | ai_tags | varchar(255) | AI 生成标签，逗号分隔或 JSON |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
@@ -87,6 +88,7 @@
 
 - `idx_lost_items_user_id(user_id)`
 - `idx_lost_items_category_status(category, status)`
+- `idx_lost_items_review_status(review_status)`
 - `idx_lost_items_location(lost_location)`
 
 ### 3.4 `found_items` 招领表
@@ -104,9 +106,17 @@
 | custody_type | varchar(30) | 见 `enums.md` CustodyType |
 | contact_preference | varchar(30) | 见 `enums.md` ContactPreference |
 | status | varchar(20) | 见 `enums.md` FoundItemStatus |
+| review_status | varchar(20) | 见 `enums.md` ReviewStatus；招领内容审核状态 |
 | ai_tags | varchar(255) | AI 标签 |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
+
+索引建议：
+
+- `idx_found_items_user_id(user_id)`
+- `idx_found_items_category_status(category, status)`
+- `idx_found_items_review_status(review_status)`
+- `idx_found_items_location(found_location)`
 
 ### 3.5 `item_images` 物品图片表
 
@@ -156,12 +166,14 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | id | char(26) | 主键 |
-| match_id | char(26) | 来源匹配记录 |
+| match_id | char(26) | 来源匹配记录，可空 |
 | found_item_id | char(26) | 招领物品 |
 | claimant_id | char(26) | 认领人 |
 | verify_level | varchar(20) | 见 `enums.md` VerifyLevel |
 | review_status | varchar(20) | 见 `enums.md` ClaimReviewStatus |
 | reject_reason | varchar(255) | 拒绝原因 |
+| proof_text | varchar(500) | 认领者补充凭证说明 |
+| appeal_reason | varchar(500) | 申诉理由 |
 | claimed_at | datetime | 发起时间 |
 | updated_at | datetime | 更新时间 |
 
@@ -172,6 +184,7 @@
 | id | char(26) | 主键 |
 | claim_id | char(26) | 认领请求 |
 | question_id | char(26) | 验证问题 |
+| question_text | varchar(255) | 验证问题文本快照 |
 | answer_text | varchar(255) | 用户回答 |
 | match_score | decimal(5,2) | 回答匹配度 |
 | created_at | datetime | 创建时间 |
@@ -215,6 +228,7 @@
 | is_read | tinyint | 是否已读 |
 | related_type | varchar(30) | 关联业务类型 |
 | related_id | char(26) | 关联业务 ID |
+| priority | varchar(20) | 见 `enums.md` NotificationPriority |
 | created_at | datetime | 创建时间 |
 
 ### 3.13 `reports` 举报表

@@ -1,0 +1,111 @@
+// 寻迹品牌色与全局样式
+:root {
+  --xunji-primary: #0d4f4f;
+  --xunji-primary-dark: #083a3a;
+  --xunji-accent: #7c3aed;
+  --xunji-accent-soft: #ede9fe;
+  --xunji-bg: #f6f8fa;
+  --xunji-surface: #ffffff;
+  --xunji-text: #1e293b;
+  --xunji-text-muted: #64748b;
+  --xunji-border: #e2e8f0;
+  --xunji-hero: linear-gradient(135deg, #0d4f4f 0%, #1e7a7a 45%, #7c3aed 100%);
+  --xunji-radius: 12px;
+  --xunji-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --xunji-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  color: var(--xunji-text);
+  background: var(--xunji-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+// 公共 utility
+.xunji-hero {
+  background: var(--xunji-hero);
+  color: #fff;
+  border-radius: var(--xunji-radius);
+}
+
+.xunji-card {
+  background: var(--xunji-surface);
+  border: 1px solid var(--xunji-border);
+  border-radius: var(--xunji-radius);
+  box-shadow: var(--xunji-shadow-sm);
+}
+
+.xunji-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .eyebrow {
+    color: var(--xunji-text-muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+.xunji-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  color: var(--xunji-text-muted);
+  text-align: center;
+}
+
+// 页面切换过渡
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.12s ease;
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+}
+
+// EP 卡片细节微调
+.el-card.is-never-shadow {
+  border-radius: var(--xunji-radius);
+}

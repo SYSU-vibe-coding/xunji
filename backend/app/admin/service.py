@@ -243,9 +243,7 @@ class AdminService:
         handover_stats = await self._claim_svc.get_handover_stats_internal()
         total_items = total_lost + total_found
         recovery_rate = (
-            round(handover_stats["handedOverCount"] / total_items * 100, 2)
-            if total_items
-            else 0
+            round(handover_stats["handedOverCount"] / total_items * 100, 2) if total_items else 0
         )
         return {
             "totalUsers": total_users,

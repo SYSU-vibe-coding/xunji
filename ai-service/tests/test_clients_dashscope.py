@@ -37,7 +37,8 @@ async def test_disabled_when_no_api_key() -> None:
 
 
 def test_default_timeout_stays_within_backend_ai_budget() -> None:
-    assert settings.DASHSCOPE_TIMEOUT < 3.0
+    # Backend AI_SERVICE_TIMEOUT default is 15s; ai-service must stay under it.
+    assert settings.DASHSCOPE_TIMEOUT <= 15.0
 
 
 @pytest.mark.asyncio

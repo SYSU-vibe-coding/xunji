@@ -124,11 +124,7 @@ class MatchJobRunner:
             job_id = self._current_job_id
 
         next_run: datetime | None = None
-        if (
-            interval > 0
-            and status != "running"
-            and last_finished is not None
-        ):
+        if interval > 0 and status != "running" and last_finished is not None:
             next_run = last_finished + timedelta(minutes=interval)
 
         return {
@@ -150,9 +146,7 @@ class MatchJobRunner:
     # ------------------------------------------------------------------
 
     async def _loop(self) -> None:
-        logger.info(
-            f"[match-job] loop started, interval={self._interval_minutes}m"
-        )
+        logger.info(f"[match-job] loop started, interval={self._interval_minutes}m")
         while True:
             try:
                 interval = await self._current_interval()
@@ -196,9 +190,7 @@ class MatchJobRunner:
                 if self._status != "stopping":
                     self._status = "idle"
                 self._current_job_id = None
-            logger.info(
-                f"[match-job] run finished job_id={job_id} written={written}"
-            )
+            logger.info(f"[match-job] run finished job_id={job_id} written={written}")
         except asyncio.CancelledError:
             async with self._lock:
                 self._last_run_finished_at = now_beijing()
@@ -328,9 +320,7 @@ class MatchJobRunner:
                         new_matches.clear()
 
                     async with self._lock:
-                        self._processed_pairs = min(
-                            start + len(batch), len(pairs)
-                        )
+                        self._processed_pairs = min(start + len(batch), len(pairs))
                         self._written_matches = written
             finally:
                 await ai_client.aclose()

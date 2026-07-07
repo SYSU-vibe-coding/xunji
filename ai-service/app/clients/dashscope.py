@@ -122,8 +122,10 @@ class DashScopeClient:
             "temperature": 0.0,
             "max_tokens": 64,
         }
-        path = "/chat/completions" if self._openai_mode else (
-            "/services/aigc/text-generation/generation"
+        path = (
+            "/chat/completions"
+            if self._openai_mode
+            else ("/services/aigc/text-generation/generation")
         )
         try:
             resp = await self._client.post(path, json=payload)

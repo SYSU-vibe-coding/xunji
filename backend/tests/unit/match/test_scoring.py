@@ -31,8 +31,16 @@ def test_partial_location_match_returns_60() -> None:
     assert scores["locationScore"] == 60.0
 
 
-def test_time_decay_to_zero_beyond_50h() -> None:
+def test_time_decay_with_day_based_formula() -> None:
+    # New formula: max(0, 100 - days_diff * 2). 3 days apart -> 94.
     a = {"name": "x", "time": "2026-04-30T00:00:00"}
-    b = {"name": "x", "time": "2026-05-03T00:00:00"}  # 72h apart
+    b = {"name": "x", "time": "2026-05-03T00:00:00"}  # 3 days apart
+    scores = rule_based_score(a, b)
+    assert scores["timeScore"] == 94.0
+
+
+def test_time_decay_to_zero_beyond_50_days() -> None:
+    a = {"name": "x", "time": "2026-04-30T00:00:00"}
+    b = {"name": "x", "time": "2026-07-01T00:00:00"}  # ~62 days apart
     scores = rule_based_score(a, b)
     assert scores["timeScore"] == 0.0

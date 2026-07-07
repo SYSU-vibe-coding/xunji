@@ -66,18 +66,18 @@ def test_calculate_match_uses_backend_fallback_scores() -> None:
             ),
         )
     )
-    assert resp.image_score == 30.0
+    assert resp.image_score == 60.0
     assert resp.text_score == 100.0
     assert resp.location_score == 100.0
-    assert resp.time_score == 98.0
-    assert resp.total_score == 71.8
+    assert resp.time_score == 99.92
+    assert resp.total_score == 83.99
 
 
-def test_time_score_decays_with_hours() -> None:
+def test_time_score_decays_with_days() -> None:
     near = _baseline.time_score_value("2026-04-30T08:00:00", "2026-04-30T09:00:00")
     far = _baseline.time_score_value("2026-04-30T08:00:00", "2026-05-03T08:00:00")
     assert near > far
-    assert far == 0.0  # 72h * 2 = 144 → clamped to 0
+    assert far == 94.0  # 3 days * 2 = 6 → 100 - 6 = 94
 
 
 def test_time_score_zero_when_one_missing() -> None:

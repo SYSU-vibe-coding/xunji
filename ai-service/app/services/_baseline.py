@@ -104,15 +104,31 @@ def location_score_value(left: str | None, right: str | None) -> float:
         return 0.0
     if left == right:
         return 100.0
+    # Containment (one place inside another, e.g. "图书馆二楼" ⊃ "图书馆")
+    # is a strong signal — give 85 so near-locations still score well.
+    if left in right or right in left:
+        return 85.0
     return 60.0 if left[:2] == right[:2] else 0.0
 
 
 def image_score_value(left: list[str] | None, right: list[str] | None) -> float:
-    return 30.0 if left and right else 0.0
+    # Without a real image-similarity model we can't compare visual content.
+    # Returning 0 when images are missing is too punishing (image has weight
+    # 0.4 and would cap total at 60). Use neutral scores instead:
+    #   both have images  -> 60 (encourage uploading, but rule can't measure)
+    #   one side only     -> 50 (neutral, can't compare)
+    #   neither           -> 50 (neutral)
+    if left and right:
+        return 60.0
+    return 50.0
 
 
 def time_score_value(left: str | None, right: str | None) -> float:
-    """matching-rules.md §2: max(0, 100 - |hours_diff| * 2), 0 beyond ~50h."""
+    """Time proximity. ``max(0, 100 - days_diff * 2)`` — within a week still
+    scores 86, beyond ~50 days drops to 0. Looser than the original
+    ``hours * 2`` formula because lost/found events may legitimately be
+    reported days apart.
+    """
     if not left or not right:
         return 0.0
     from datetime import datetime
@@ -123,8 +139,8 @@ def time_score_value(left: str | None, right: str | None) -> float:
             parsed.append(datetime.fromisoformat(raw.replace("Z", "+00:00")))
         except ValueError:
             return 50.0  # both present but unparseable → neutral fallback
-    delta_hours = abs((parsed[0] - parsed[1]).total_seconds()) / 3600.0
-    return max(0.0, 100.0 - delta_hours * 2.0)
+    delta_days = abs((parsed[0] - parsed[1]).total_seconds()) / 86400.0
+    return max(0.0, 100.0 - delta_days * 2.0)
 
 
 def _combined_text(values: Iterable[str | None]) -> str:

@@ -30,6 +30,12 @@ const routes: RouteRecordRaw[] = [
         name: 'announcements',
         component: () => import('@/views/AnnouncementView.vue'),
       },
+      { path: 'matches', name: 'matches', component: () => import('@/views/MatchView.vue') },
+      {
+        path: 'operation-logs',
+        name: 'operation-logs',
+        component: () => import('@/views/OperationLogView.vue'),
+      },
       { path: 'users', name: 'admin-users', component: () => import('@/views/UserListView.vue') },
     ],
   },

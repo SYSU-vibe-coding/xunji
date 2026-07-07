@@ -1,8 +1,15 @@
-"""Thin async client for Alibaba Cloud DashScope (BaiLian) APIs.
+"""Thin async client for LLM providers.
 
-Wraps two surfaces we use:
-- text-embedding (used for similarity scoring)
-- multimodal generation / VL (used for sensitive detection and classification)
+Supports two API styles:
+- **DashScope-native** (Alibaba BaiLian): uses ``/services/embeddings/...``
+  and ``/services/aigc/multimodal-generation/generation``.
+- **OpenAI-compatible** (SiliconFlow, OpenAI, etc.): uses ``/embeddings``
+  and ``/chat/completions``.
+
+The style is auto-detected from the base URL. When ``LLM_MODEL`` is set,
+text similarity scoring uses a chat-completion prompt (asks the model to
+rate similarity 0-100). When only ``DASHSCOPE_TEXT_EMBEDDING_MODEL`` /
+``TEXT_EMBEDDING_MODEL`` is set, embeddings + cosine similarity are used.
 
 All public methods return ``None`` on any kind of failure (network error,
 non-2xx, malformed response). Callers MUST treat ``None`` as "fall back to
@@ -11,6 +18,7 @@ the keyword baseline" — no exception is propagated.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -20,7 +28,7 @@ from app.core.config import settings
 
 
 class DashScopeClient:
-    """Async DashScope wrapper. One per process; share via FastAPI lifespan."""
+    """Async LLM wrapper. One per process; share via FastAPI lifespan."""
 
     def __init__(
         self,
@@ -54,6 +62,124 @@ class DashScopeClient:
     def enabled(self) -> bool:
         return bool(self._api_key)
 
+    @property
+    def _openai_mode(self) -> bool:
+        return settings.is_openai_compatible
+
+    # ------------------------------------------------------------------
+    # Text similarity (high-level convenience for match service)
+    # ------------------------------------------------------------------
+
+    async def text_similarity_score(
+        self,
+        lost_text: str,
+        found_text: str,
+        *,
+        lost_location: str | None = None,
+        found_location: str | None = None,
+        lost_time: str | None = None,
+        found_time: str | None = None,
+    ) -> float | None:
+        """Rate text similarity 0-100 using the configured LLM or embeddings.
+
+        Returns ``None`` on any failure so the caller can fall back to the
+        keyword baseline.
+        """
+        if not self.enabled or not lost_text or not found_text:
+            return None
+
+        if settings.LLM_MODEL:
+            return await self._chat_similarity(
+                lost_text, found_text, lost_location, found_location, lost_time, found_time
+            )
+
+        embedding_model = settings.TEXT_EMBEDDING_MODEL or settings.DASHSCOPE_TEXT_EMBEDDING_MODEL
+        if embedding_model:
+            vectors = await self.text_embedding([lost_text, found_text])
+            if vectors is None or len(vectors) != 2:
+                return None
+            return _cosine_pct(vectors[0], vectors[1])
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Chat completion (OpenAI-compatible)
+    # ------------------------------------------------------------------
+
+    async def chat_completion(self, system_prompt: str, user_prompt: str) -> str | None:
+        """Call ``/chat/completions`` and return the assistant message text."""
+        if not self.enabled:
+            return None
+        model = settings.LLM_MODEL
+        if not model:
+            return None
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": 64,
+        }
+        path = "/chat/completions" if self._openai_mode else (
+            "/services/aigc/text-generation/generation"
+        )
+        try:
+            resp = await self._client.post(path, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            if self._openai_mode:
+                choices = data.get("choices", [])
+                if not choices:
+                    return None
+                content = choices[0].get("message", {}).get("content")
+                return content.strip() if isinstance(content, str) and content.strip() else None
+            # DashScope text-generation format
+            output = data.get("output", {})
+            text = output.get("text")
+            return text.strip() if isinstance(text, str) and text.strip() else None
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            logger.warning("[ai:50002] chat_completion failed: {}", exc)
+            return None
+
+    async def _chat_similarity(
+        self,
+        lost_text: str,
+        found_text: str,
+        lost_location: str | None,
+        found_location: str | None,
+        lost_time: str | None,
+        found_time: str | None,
+    ) -> float | None:
+        """Ask the LLM to rate how likely these two items are the same, 0-100."""
+        system = (
+            "你是一个失物招领匹配助手。给定一条失物信息和一条招领信息，"
+            "判断它们是否指向同一件物品，并给出一个 0 到 100 的相似度分数。"
+            "只回复一个数字，不要有任何其他文字。"
+        )
+        user = (
+            f"失物信息: 描述={lost_text}"
+            f"{f', 地点={lost_location}' if lost_location else ''}"
+            f"{f', 时间={lost_time}' if lost_time else ''}\n"
+            f"招领信息: 描述={found_text}"
+            f"{f', 地点={found_location}' if found_location else ''}"
+            f"{f', 时间={found_time}' if found_time else ''}\n"
+            "请给出相似度分数 (0-100):"
+        )
+        raw = await self.chat_completion(system, user)
+        if raw is None:
+            return None
+        match = re.search(r"\d+(?:\.\d+)?", raw)
+        if not match:
+            logger.warning("[ai:50002] chat_similarity unparseable reply: {}", raw[:80])
+            return None
+        try:
+            score = float(match.group())
+        except ValueError:
+            return None
+        return max(0.0, min(100.0, score))
+
     # ------------------------------------------------------------------
     # Text embedding
     # ------------------------------------------------------------------
@@ -62,8 +188,37 @@ class DashScopeClient:
         """Return one embedding vector per input text, or ``None`` on failure."""
         if not self.enabled or not texts:
             return None
+        model = settings.TEXT_EMBEDDING_MODEL or settings.DASHSCOPE_TEXT_EMBEDDING_MODEL
+        if not model:
+            return None
+
+        if self._openai_mode:
+            return await self._embedding_openai(model, texts)
+        return await self._embedding_dashscope(model, texts)
+
+    async def _embedding_openai(self, model: str, texts: list[str]) -> list[list[float]] | None:
+        payload = {"model": model, "input": texts}
+        try:
+            resp = await self._client.post("/embeddings", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("data", [])
+            vectors = [item.get("embedding") for item in items if item.get("embedding")]
+            if len(vectors) != len(texts):
+                logger.warning(
+                    "[ai:50002] embedding_openai returned {} for {} inputs",
+                    len(vectors),
+                    len(texts),
+                )
+                return None
+            return vectors
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            logger.warning("[ai:50002] embedding_openai failed: {}", exc)
+            return None
+
+    async def _embedding_dashscope(self, model: str, texts: list[str]) -> list[list[float]] | None:
         payload = {
-            "model": settings.DASHSCOPE_TEXT_EMBEDDING_MODEL,
+            "model": model,
             "input": {"texts": texts},
             "parameters": {"text_type": "query"},
         }
@@ -95,8 +250,44 @@ class DashScopeClient:
         """Ask a VL model about an image, return the raw text reply or ``None``."""
         if not self.enabled or not image_url or not prompt:
             return None
+        vl_model = settings.DASHSCOPE_VL_MODEL
+        if not vl_model:
+            return None
+
+        if self._openai_mode:
+            return await self._vl_openai(vl_model, image_url, prompt)
+        return await self._vl_dashscope(vl_model, image_url, prompt)
+
+    async def _vl_openai(self, model: str, image_url: str, prompt: str) -> str | None:
         payload: dict[str, Any] = {
-            "model": settings.DASHSCOPE_VL_MODEL,
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+            "max_tokens": 512,
+        }
+        try:
+            resp = await self._client.post("/chat/completions", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [])
+            if not choices:
+                return None
+            content = choices[0].get("message", {}).get("content")
+            return content.strip() if isinstance(content, str) and content.strip() else None
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            logger.warning("[ai:50002] vl_openai failed: {}", exc)
+            return None
+
+    async def _vl_dashscope(self, model: str, image_url: str, prompt: str) -> str | None:
+        payload: dict[str, Any] = {
+            "model": model,
             "input": {
                 "messages": [
                     {
@@ -137,3 +328,16 @@ class DashScopeClient:
         except (httpx.HTTPError, ValueError, KeyError) as exc:
             logger.warning("[ai:50002] vl_understand failed: {}", exc)
             return None
+
+
+def _cosine_pct(a: list[float], b: list[float]) -> float:
+    import math
+
+    if len(a) != len(b) or not a:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return max(0.0, min(100.0, dot / (norm_a * norm_b) * 100.0))

@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -8,6 +9,24 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from app.common.errors import BizError, ErrorCode
+
+
+def _safe_errors(exc: ValidationError | RequestValidationError) -> list[dict[str, Any]]:
+    """Return JSON-serializable validation errors.
+
+    pydantic's ``exc.errors()`` may embed the original exception object in
+    ``ctx.error`` (e.g. a ``ValueError``), which is not JSON serializable
+    and turns a 422 into a 500. We strip ``ctx`` down to its message.
+    """
+    errors = exc.errors()
+    safe: list[dict[str, Any]] = []
+    for err in errors:
+        item = dict(err)
+        ctx = item.get("ctx")
+        if isinstance(ctx, dict) and "error" in ctx:
+            item["ctx"] = {k: (str(v) if k == "error" else v) for k, v in ctx.items()}
+        safe.append(item)
+    return safe
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -36,7 +55,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "code": ErrorCode.PARAM_ERROR,
                 "message": "参数校验失败",
-                "data": exc.errors(),
+                "data": _safe_errors(exc),
                 "requestId": request_id,
                 "timestamp": datetime.now(UTC).astimezone().isoformat(),
             },
@@ -53,7 +72,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "code": ErrorCode.PARAM_ERROR,
                 "message": "参数校验失败",
-                "data": exc.errors(),
+                "data": _safe_errors(exc),
                 "requestId": request_id,
                 "timestamp": datetime.now(UTC).astimezone().isoformat(),
             },

@@ -125,3 +125,47 @@ export interface UserStatusRequest {
   status: UserStatus;
   reason?: string;
 }
+
+export interface MatchJobStatus {
+  status: 'idle' | 'running' | 'stopping';
+  intervalMinutes: number;
+  currentJobId: string | null;
+  totalPairs: number;
+  processedPairs: number;
+  writtenMatches: number;
+  lastRunStartedAt: string | null;
+  lastRunFinishedAt: string | null;
+  lastRunWrittenMatches: number;
+  lastError: string | null;
+  nextRunAt: string | null;
+}
+
+export interface MatchRunResponse {
+  jobId: string;
+}
+
+export interface MatchIntervalRequest {
+  intervalMinutes: number;
+}
+
+export interface MatchIntervalResponse {
+  intervalMinutes: number;
+}
+
+export interface OperationLogRecord {
+  id: string;
+  operatorId: string;
+  operatorRole: string;
+  bizType: string;
+  bizId: string;
+  action: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface OperationLogQuery extends AdminPageQuery {
+  bizType?: string;
+  action?: string;
+  operatorRole?: string;
+  keyword?: string;
+}

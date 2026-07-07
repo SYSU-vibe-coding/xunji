@@ -248,9 +248,9 @@ onMounted(load);
         </div>
       </el-card>
 
-      <!-- 认领人补交凭证（PROOF_PENDING） -->
+      <!-- 认领人补交凭证（PENDING / ANSWER_PASSED / PROOF_PENDING，审核通过前都可补传） -->
       <el-card
-        v-if="isClaimant && detail.reviewStatus === 'PROOF_PENDING'"
+        v-if="isClaimant && ['PENDING', 'ANSWER_PASSED', 'PROOF_PENDING'].includes(detail.reviewStatus)"
         shadow="never"
         class="action-card"
       >

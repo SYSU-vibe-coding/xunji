@@ -9,6 +9,7 @@ from app.core.ai_client import AIClient
 from app.core.bootstrap import ensure_default_admin
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.match.jobs import get_runner
 
 
 @asynccontextmanager
@@ -18,9 +19,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning(warning)
     await ensure_default_admin()
     app.state.ai_client = AIClient()
+    runner = get_runner()
+    app.state.match_runner = runner
+    runner.start()
     try:
         yield
     finally:
+        await runner.stop()
         await app.state.ai_client.aclose()
         logger.info("Shutting down...")
 

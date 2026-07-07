@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from app.admin.deps import get_admin_service
 from app.admin.schemas import (
     AnnouncementCreateRequest,
+    MatchIntervalRequest,
     ReportHandleRequest,
     ReviewRequest,
     UserStatusRequest,
@@ -13,6 +14,7 @@ from app.admin.service import AdminService
 from app.common.response import success
 from app.common.validators import validate_ulid
 from app.core.auth import require_admin
+from app.match.jobs import get_runner
 from app.user.schemas import CurrentUser
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -134,4 +136,58 @@ async def change_user_status(
 ) -> dict[str, Any]:
     user_id = validate_ulid(user_id, "userId")
     data = await svc.change_user_status(user_id, req, admin_user)
+    return success(data=data)
+
+
+# ------------------------------------------------------------------
+# Match job control (admin-only)
+# ------------------------------------------------------------------
+
+
+@router.get("/matches/status")
+async def get_match_status(
+    admin_user: CurrentUser = Depends(require_admin()),
+) -> dict[str, Any]:
+    runner = get_runner()
+    return success(data=await runner.get_status())
+
+
+@router.post("/matches/run")
+async def trigger_match_run(
+    admin_user: CurrentUser = Depends(require_admin()),
+) -> dict[str, Any]:
+    runner = get_runner()
+    job_id = await runner.trigger_now()
+    return success(data={"jobId": job_id})
+
+
+@router.put("/matches/interval")
+async def set_match_interval(
+    req: MatchIntervalRequest,
+    admin_user: CurrentUser = Depends(require_admin()),
+) -> dict[str, Any]:
+    runner = get_runner()
+    await runner.set_interval(req.interval_minutes)
+    return success(data={"intervalMinutes": req.interval_minutes})
+
+
+# ------------------------------------------------------------------
+# Operation logs (admin-only)
+# ------------------------------------------------------------------
+
+
+@router.get("/operation-logs")
+async def list_operation_logs(
+    biz_type: str | None = Query(default=None, alias="bizType"),
+    action: str | None = Query(default=None),
+    operator_role: str | None = Query(default=None, alias="operatorRole"),
+    keyword: str | None = Query(default=None),
+    page_no: int = Query(default=1, ge=1, alias="pageNo"),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    data = await svc.list_operation_logs(
+        biz_type, action, operator_role, keyword, page_no, page_size
+    )
     return success(data=data)

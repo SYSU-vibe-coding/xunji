@@ -33,7 +33,10 @@ const bizId = computed(() => {
 const hasContext = computed(() => Boolean(bizType.value && bizId.value));
 
 const matches = ref<MatchSummary[]>([]);
+const total = ref(0);
 const loading = ref(false);
+const pageNo = ref(1);
+const pageSize = ref(20);
 const recalculating = ref(false);
 const detailVisible = ref(false);
 const activeMatch = ref<MatchDetail | MatchSummary | null>(null);
@@ -44,25 +47,23 @@ const claimAnswers = reactive<Record<string, string>>({});
 const proofImageUrls = ref<string[]>([]);
 const claimSubmitting = ref(false);
 
-const title = computed(() => (bizType.value === 'FOUND' ? '招领匹配' : '失物匹配'));
+const title = computed(() => (bizType.value === 'FOUND' ? '招领匹配' : bizType.value === 'LOST' ? '失物匹配' : '我的匹配'));
 
 async function load() {
-  const currentBizType = bizType.value;
-  const currentBizId = bizId.value;
-  if (!currentBizType || !currentBizId) {
-    matches.value = [];
-    loading.value = false;
-    return;
-  }
   loading.value = true;
   try {
-    const data = await listMatches({
-      bizType: currentBizType,
-      bizId: currentBizId,
-      pageSize: 20,
+    const params: Record<string, unknown> = {
+      pageNo: pageNo.value,
+      pageSize: pageSize.value,
       minScore: 70,
-    });
+    };
+    if (bizType.value && bizId.value) {
+      params.bizType = bizType.value;
+      params.bizId = bizId.value;
+    }
+    const data = await listMatches(params);
     matches.value = data.list;
+    total.value = data.total;
   } catch (err) {
     matches.value = [];
     ElMessage.error(err instanceof ApiError ? err.message : '加载匹配失败');
@@ -83,7 +84,10 @@ async function openMatch(matchId: string) {
 async function handleRecalculate() {
   const currentBizType = bizType.value;
   const currentBizId = bizId.value;
-  if (!currentBizType || !currentBizId) return;
+  if (!currentBizType || !currentBizId) {
+    ElMessage.info('请在具体物品详情页使用重算功能');
+    return;
+  }
   recalculating.value = true;
   try {
     const result = await recalculateMatch({ bizType: currentBizType, bizId: currentBizId });
@@ -147,6 +151,11 @@ async function submitClaim() {
   }
 }
 
+function onPageChange(p: number) {
+  pageNo.value = p;
+  load();
+}
+
 watch(() => route.fullPath, load);
 onMounted(load);
 </script>
@@ -166,7 +175,7 @@ onMounted(load);
 
     <el-skeleton v-if="loading" :rows="4" animated />
 
-    <template v-else-if="hasContext">
+    <template v-else>
       <div v-if="matches.length" class="grid">
         <el-card v-for="m in matches" :key="m.matchId" shadow="never" class="match-card">
           <div class="match-head">
@@ -195,21 +204,22 @@ onMounted(load);
       <EmptyState
         v-else
         title="暂无匹配结果"
-        description="可以稍后刷新，或手动触发重新计算。"
+        description="系统还未生成匹配记录，可稍后刷新或联系管理员触发匹配。"
       >
         <template #icon><Aim /></template>
       </EmptyState>
-    </template>
 
-    <EmptyState
-      v-else
-      title="请先选择一条发布记录"
-      description="从“我的发布”或物品详情进入后，可查看该物品的匹配结果。"
-      action-text="去我的发布"
-      @action="router.push('/profile/items')"
-    >
-      <template #icon><Aim /></template>
-    </EmptyState>
+      <div v-if="total > pageSize" class="pager">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="total"
+          :current-page="pageNo"
+          :page-size="pageSize"
+          @current-change="onPageChange"
+        />
+      </div>
+    </template>
 
     <el-dialog v-model="detailVisible" title="匹配详情" width="560px">
       <template v-if="activeMatch">
@@ -340,6 +350,12 @@ onMounted(load);
 .actions {
   display: flex;
   gap: 8px;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .detail {

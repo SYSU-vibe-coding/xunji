@@ -19,6 +19,7 @@ from app.credit.service import CreditService
 from app.db.ulid import generate_ulid
 from app.item.service import ItemService
 from app.notification.service import NotificationService
+from app.operation_log.repository import OperationLogRepository
 from app.operation_log.service import OperationLogService
 from app.user.schemas import CurrentUser
 from app.user.service import UserService
@@ -35,6 +36,7 @@ class AdminService:
         self._credit_svc = CreditService(session)
         self._notification_svc = NotificationService(session)
         self._log_svc = OperationLogService(session)
+        self._log_repo = OperationLogRepository(session)
 
     async def list_certifications(
         self, review_status: str | None, page_no: int, page_size: int
@@ -305,3 +307,38 @@ class AdminService:
         )
         await self._session.commit()
         return {"id": user.id, "status": user.status}
+
+    async def list_operation_logs(
+        self,
+        biz_type: str | None,
+        action: str | None,
+        operator_role: str | None,
+        keyword: str | None,
+        page_no: int,
+        page_size: int,
+    ) -> dict[str, Any]:
+        offset = (page_no - 1) * page_size
+        logs, total = await self._log_repo.list_with_filter(
+            biz_type=biz_type,
+            action=action,
+            operator_role=operator_role,
+            keyword=keyword,
+            offset=offset,
+            limit=page_size,
+        )
+        items: list[dict[str, Any]] = []
+        for log in logs:
+            items.append(
+                {
+                    "id": log.id,
+                    "operatorId": log.operator_id,
+                    "operatorRole": log.operator_role,
+                    "bizType": log.biz_type,
+                    "bizId": log.biz_id,
+                    "action": log.action,
+                    "detail": log.detail,
+                    "createdAt": format_beijing(log.created_at),
+                }
+            )
+        params = PaginationParams(pageNo=page_no, pageSize=page_size)
+        return paginate(items, total, params)

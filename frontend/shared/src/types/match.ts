@@ -31,8 +31,8 @@ export interface MatchDetail extends MatchSummary {
 }
 
 export interface MatchQuery {
-  bizType: MatchBizType;
-  bizId: string;
+  bizType?: MatchBizType;
+  bizId?: string;
   pageNo?: number;
   pageSize?: number;
   minScore?: number;

@@ -6,7 +6,9 @@ import {
   Bell,
   Document,
   House,
+  List,
   Medal,
+  Promotion,
   User,
   Warning,
 } from '@element-plus/icons-vue';
@@ -19,6 +21,8 @@ const items = [
   { key: '/reviews', label: '内容审核', icon: Document },
   { key: '/reports', label: '举报处理', icon: Warning },
   { key: '/announcements', label: '公告管理', icon: Bell },
+  { key: '/matches', label: '匹配任务', icon: Promotion },
+  { key: '/operation-logs', label: '操作日志', icon: List },
   { key: '/users', label: '用户管理', icon: User },
 ];
 

@@ -15,16 +15,15 @@ router = APIRouter(tags=["matches"])
 
 @router.get("/matches")
 async def list_matches(
-    biz_type: str = Query(..., alias="bizType"),
-    biz_id: str = Query(..., alias="bizId"),
+    biz_type: str = Query(default="", alias="bizType"),
+    biz_id: str = Query(default="", alias="bizId"),
     page_no: int = Query(default=1, ge=1, alias="pageNo"),
-    page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
+    page_size: int = Query(default=20, ge=1, le=50, alias="pageSize"),
     min_score: float = Query(default=70, ge=0, le=100, alias="minScore"),
     status: str | None = Query(default=None),
     current_user: CurrentUser = Depends(get_current_user),
     svc: MatchService = Depends(get_match_service),
 ) -> dict[str, Any]:
-    biz_id = validate_ulid(biz_id, "bizId")
     query = MatchListQuery(
         bizType=biz_type,
         bizId=biz_id,
@@ -33,7 +32,12 @@ async def list_matches(
         minScore=min_score,
         status=status,
     )
-    data = await svc.list_matches(query, current_user)
+    if biz_type and biz_id:
+        biz_id = validate_ulid(biz_id, "bizId")
+        query.biz_id = biz_id
+        data = await svc.list_matches(query, current_user)
+    else:
+        data = await svc.list_my_matches(query, current_user)
     return success(data=data)
 
 

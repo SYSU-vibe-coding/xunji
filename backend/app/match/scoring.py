@@ -41,12 +41,15 @@ def rule_based_score(lost: dict[str, Any], found: dict[str, Any]) -> dict[str, f
 
 
 def _image_score(left: list[str] | None, right: list[str] | None) -> float:
-    # Without AI we have no real image similarity. Per matching-rules.md §2
-    # this is simply 0; we keep a small bonus when both sides have images so
-    # equally-described items don't end up identical to the no-image case.
+    # Without a real image-similarity model we can't compare visual content.
+    # Returning 0 when images are missing is too punishing (image has weight
+    # 0.4 and would cap total at 60). Use neutral scores instead:
+    #   both have images  -> 60 (encourage uploading, but rule can't measure)
+    #   one side only     -> 50 (neutral, can't compare)
+    #   neither           -> 50 (neutral)
     if left and right:
-        return 30.0
-    return 0.0
+        return 60.0
+    return 50.0
 
 
 def _text_score(left: str, right: str) -> float:
@@ -62,6 +65,9 @@ def _location_score(left: str | None, right: str | None) -> float:
         return 0.0
     if left == right:
         return 100.0
+    # Containment (e.g. "图书馆二楼" ⊃ "图书馆") is a strong signal.
+    if left in right or right in left:
+        return 85.0
     return 60.0 if left[:2] == right[:2] else 0.0
 
 
@@ -74,8 +80,8 @@ def _time_score(left: str | None, right: str | None) -> float:
             parsed.append(datetime.fromisoformat(raw.replace("Z", "+00:00")))
         except ValueError:
             return 50.0
-    delta_hours = abs((parsed[0] - parsed[1]).total_seconds()) / 3600.0
-    return max(0.0, 100.0 - delta_hours * 2.0)
+    delta_days = abs((parsed[0] - parsed[1]).total_seconds()) / 86400.0
+    return max(0.0, 100.0 - delta_days * 2.0)
 
 
 def _combine(*parts: str | None) -> str:

@@ -70,3 +70,8 @@ class UserStatusRequest(BaseModel):
             msg = f"status must be one of {VALID_USER_STATUSES}"
             raise ValueError(msg)
         return v
+
+
+class MatchIntervalRequest(BaseModel):
+    interval_minutes: int = Field(..., ge=0, le=1440, alias="intervalMinutes")
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

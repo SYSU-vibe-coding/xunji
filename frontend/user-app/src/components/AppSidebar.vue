@@ -68,11 +68,12 @@ function go(path: string) {
       <el-menu-item v-for="item in navItems" :key="item.key" :index="item.route">
         <el-icon><component :is="item.icon" /></el-icon>
         <template #title>
-          <span>{{ item.label }}</span>
+          <span class="menu-title-text">{{ item.label }}</span>
           <el-badge
             v-if="item.key === 'notifications' && notice.unreadTotal"
             :value="notice.unreadTotal"
-            class="badge"
+            :max="99"
+            class="menu-badge"
           />
         </template>
       </el-menu-item>
@@ -152,8 +153,16 @@ function go(path: string) {
   :deep(.el-menu-item:hover) {
     background: rgba(13, 79, 79, 0.05);
   }
-  .badge {
-    margin-left: 8px;
+
+  .menu-title-text {
+    flex-shrink: 0;
+  }
+
+  .menu-badge {
+    margin-left: 6px;
+    :deep(.el-badge__content) {
+      line-height: 18px;
+    }
   }
 }
 

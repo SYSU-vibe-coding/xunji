@@ -134,7 +134,6 @@ class ItemService:
         )
         await self._session.commit()
 
-        background_tasks.add_task(_trigger_match_for_lost, item_id)
         return CreateLostItemResponse(id=item_id, status="SEARCHING")
 
     async def list_lost_items(self, query: LostItemQuery) -> dict[str, Any]:
@@ -436,7 +435,6 @@ class ItemService:
         )
         await self._session.commit()
 
-        background_tasks.add_task(_trigger_match_for_found, item_id)
         return CreateFoundItemResponse(
             id=item_id, status="PENDING", is_sensitive=bool(is_sensitive)
         )

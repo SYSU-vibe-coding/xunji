@@ -7,7 +7,9 @@ VALID_MATCH_BIZ_TYPES = {"LOST", "FOUND"}
 VALID_MATCH_STATUSES = {"NEW", "READ", "CLAIMED", "EXPIRED"}
 
 
-def normalize_biz_type(value: str) -> str:
+def normalize_biz_type(value: str | None) -> str | None:
+    if not value:  # empty string or None
+        return None
     normalized = value.upper()
     if normalized not in VALID_MATCH_BIZ_TYPES:
         msg = "bizType must be LOST or FOUND"
@@ -16,8 +18,8 @@ def normalize_biz_type(value: str) -> str:
 
 
 class MatchListQuery(BaseModel):
-    biz_type: str = Field(..., alias="bizType")
-    biz_id: str = Field(..., alias="bizId")
+    biz_type: str | None = Field(default=None, alias="bizType")
+    biz_id: str | None = Field(default=None, alias="bizId")
     page_no: int = Field(default=1, ge=1, alias="pageNo")
     page_size: int = Field(default=10, ge=1, le=50, alias="pageSize")
     min_score: float = Field(default=70, ge=0, le=100, alias="minScore")
@@ -26,7 +28,7 @@ class MatchListQuery(BaseModel):
 
     @field_validator("biz_type")
     @classmethod
-    def validate_biz_type(cls, value: str) -> str:
+    def validate_biz_type(cls, value: str | None) -> str | None:
         return normalize_biz_type(value)
 
     @field_validator("status")
@@ -49,7 +51,11 @@ class MatchRecalculateRequest(BaseModel):
     @field_validator("biz_type")
     @classmethod
     def validate_biz_type(cls, value: str) -> str:
-        return normalize_biz_type(value)
+        result = normalize_biz_type(value)
+        if result is None:
+            msg = "bizType must be LOST or FOUND"
+            raise ValueError(msg)
+        return result
 
 
 class MatchCounterpartSummary(BaseModel):

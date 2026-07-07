@@ -68,6 +68,47 @@ class MatchResultRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all()), total
 
+    async def list_by_user_items(
+        self,
+        *,
+        lost_item_ids: list[str],
+        found_item_ids: list[str],
+        min_score: Decimal,
+        status: str | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[MatchResult], int]:
+        """List matches where the user owns either the lost or found item."""
+        from sqlalchemy import or_
+
+        conditions = [MatchResult.total_score >= min_score]
+        if status is not None:
+            conditions.append(MatchResult.match_status == status)
+
+        # Filter: user owns lost OR found item
+        id_conditions = []
+        if lost_item_ids:
+            id_conditions.append(MatchResult.lost_item_id.in_(lost_item_ids))
+        if found_item_ids:
+            id_conditions.append(MatchResult.found_item_id.in_(found_item_ids))
+        if not id_conditions:
+            return [], 0
+        conditions.append(or_(*id_conditions))
+
+        stmt = (
+            select(MatchResult)
+            .where(*conditions)
+            .order_by(MatchResult.total_score.desc(), MatchResult.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        count_stmt = select(func.count()).select_from(MatchResult).where(*conditions)
+
+        total_result = await self._session.execute(count_stmt)
+        total = total_result.scalar() or 0
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all()), total
+
     async def create(self, match: MatchResult) -> MatchResult:
         self._session.add(match)
         await self._session.flush()

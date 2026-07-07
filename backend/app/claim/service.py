@@ -223,10 +223,13 @@ class ClaimService:
         claim = await self._get_claim_or_raise(claim_id)
         if claim.claimant_id != current_user.id:
             raise BizError(ErrorCode.CLAIM_NOT_PARTY)
-        if claim.review_status != "PROOF_PENDING":
+        if claim.review_status not in {"PENDING", "ANSWER_PASSED", "PROOF_PENDING"}:
             raise BizError(ErrorCode.CLAIM_INVALID_STATE)
         claim.proof_text = req.proof_text
-        claim.review_status = "ANSWER_PASSED"
+        # Only advance from PROOF_PENDING -> ANSWER_PASSED; for other statuses,
+        # proofs are supplementary and don't change the review state.
+        if claim.review_status == "PROOF_PENDING":
+            claim.review_status = "ANSWER_PASSED"
         await self._item_svc.create_claim_proof_images_internal(claim_id, req.proof_image_urls)
         await self._claim_repo.update(claim)
         await self._log_svc.create_log(
@@ -235,10 +238,10 @@ class ClaimService:
             biz_type="CLAIM",
             biz_id=claim_id,
             action="UPDATE_STATUS",
-            detail="补充凭证: PROOF_PENDING -> ANSWER_PASSED",
+            detail=f"补充凭证: {claim.review_status}",
         )
         await self._session.commit()
-        return {"id": claim_id, "reviewStatus": "ANSWER_PASSED"}
+        return {"id": claim_id, "reviewStatus": claim.review_status}
 
     async def appeal_claim(
         self, claim_id: str, req: ClaimAppealRequest, current_user: CurrentUser

@@ -8,6 +8,12 @@ import type {
   DashboardStats,
   ItemReviewQuery,
   ItemReviewRecord,
+  MatchIntervalRequest,
+  MatchIntervalResponse,
+  MatchJobStatus,
+  MatchRunResponse,
+  OperationLogQuery,
+  OperationLogRecord,
   PageData,
   ReportHandleRequest,
   ReportQuery,
@@ -80,4 +86,25 @@ export function listAdminUsers(query: AdminUserQuery = {}) {
 
 export function changeUserStatus(id: string, payload: UserStatusRequest) {
   return http.post<{ id: string; status: string }>(`/admin/users/${id}/status`, payload);
+}
+
+// 匹配任务控制
+export function getMatchStatus() {
+  return http.get<MatchJobStatus>('/admin/matches/status');
+}
+
+export function triggerMatchRun() {
+  return http.post<MatchRunResponse>('/admin/matches/run');
+}
+
+export function setMatchInterval(payload: MatchIntervalRequest) {
+  return http.put<MatchIntervalResponse>('/admin/matches/interval', payload);
+}
+
+// 操作日志
+export function listOperationLogs(query: OperationLogQuery = {}) {
+  return http.get<PageData<OperationLogRecord>>(
+    '/admin/operation-logs',
+    query as Record<string, unknown>,
+  );
 }

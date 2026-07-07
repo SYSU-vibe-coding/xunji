@@ -8,8 +8,6 @@ available in the user's region. The rule-based image score is kept.
 
 from __future__ import annotations
 
-import math
-
 from app.clients.dashscope import DashScopeClient
 from app.schemas import CalculateMatchRequest, CalculateMatchResponse
 from app.services import _baseline
@@ -26,11 +24,18 @@ async def calculate_match(
     if not lost_text or not found_text:
         return _baseline.calculate_match(req)
 
-    vectors = await client.text_embedding([lost_text, found_text])
-    if vectors is None or len(vectors) != 2:
+    # Use the high-level similarity scorer (chat-based or embedding-based
+    # depending on which model env vars are set).
+    text_score = await client.text_similarity_score(
+        lost_text,
+        found_text,
+        lost_location=req.lost_item.location,
+        found_location=req.found_item.location,
+        lost_time=req.lost_item.time,
+        found_time=req.found_item.time,
+    )
+    if text_score is None:
         return _baseline.calculate_match(req)
-
-    text_score = min(100.0, max(0.0, _cosine(vectors[0], vectors[1])) * 100.0)
 
     image_score = _baseline.image_score_value(req.lost_item.image_urls, req.found_item.image_urls)
     location_score = _baseline.location_score_value(req.lost_item.location, req.found_item.location)
@@ -49,14 +54,3 @@ async def calculate_match(
 def _doc(name: str | None, description: str | None) -> str:
     parts = [p.strip() for p in (name, description) if p and p.strip()]
     return " ".join(parts)
-
-
-def _cosine(a: list[float], b: list[float]) -> float:
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)

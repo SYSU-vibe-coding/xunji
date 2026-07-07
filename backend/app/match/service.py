@@ -62,6 +62,7 @@ class MatchService:
     async def list_matches(
         self, query: MatchListQuery, current_user: CurrentUser
     ) -> dict[str, Any]:
+        assert query.biz_type is not None and query.biz_id is not None
         await self._ensure_biz_owner(query.biz_type, query.biz_id, current_user)
         params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
         matches, total = await self._repo.list_by_biz(
@@ -82,6 +83,43 @@ class MatchService:
             ).model_dump(by_alias=True)
             for match in matches
         ]
+        return paginate(items, total, params)
+
+    async def list_my_matches(
+        self, query: MatchListQuery, current_user: CurrentUser
+    ) -> dict[str, Any]:
+        """List all matches across the current user's lost and found items."""
+        from app.item.repository import FoundItemRepository, LostItemRepository
+
+        lost_repo = LostItemRepository(self._session)
+        found_repo = FoundItemRepository(self._session)
+        all_my_lost = await lost_repo.list_with_filter(user_id=current_user.id)
+        all_my_found = await found_repo.list_with_filter(user_id=current_user.id)
+        my_lost_ids = [it.id for it in all_my_lost[0]]
+        my_found_ids = [it.id for it in all_my_found[0]]
+
+        params = PaginationParams(pageNo=query.page_no, pageSize=query.page_size)
+        matches, total = await self._repo.list_by_user_items(
+            lost_item_ids=my_lost_ids,
+            found_item_ids=my_found_ids,
+            min_score=Decimal(str(query.min_score)),
+            status=query.status,
+            offset=params.offset,
+            limit=query.page_size,
+        )
+        items = []
+        for match in matches:
+            lost_item = await self._item_svc.get_lost_item_internal(match.lost_item_id)
+            if lost_item and lost_item.user_id == current_user.id:
+                source_biz_type = "LOST"
+            else:
+                source_biz_type = "FOUND"
+            list_item = await self._to_list_item(
+                match=match,
+                current_user=current_user,
+                source_biz_type=source_biz_type,
+            )
+            items.append(list_item.model_dump(by_alias=True))
         return paginate(items, total, params)
 
     async def get_match_detail(

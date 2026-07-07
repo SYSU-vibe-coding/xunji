@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     AI_SERVICE_BASE_URL: str = "http://127.0.0.1:5000"
     AI_SERVICE_TIMEOUT: float = 3.0
 
+    # Match auto-trigger. 0 = disabled (admin must trigger manually).
+    MATCH_AUTO_INTERVAL_MINUTES: int = 0
+    MATCH_JOB_MAX_CONCURRENCY: int = 8
+
     # SMS (simulated)
     SMS_CODE_TTL_SECONDS: int = 300  # 5 minutes
     SMS_CODE_COOLDOWN_SECONDS: int = 60  # 60s between sends

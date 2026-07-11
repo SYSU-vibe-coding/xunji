@@ -249,9 +249,7 @@ class HandoverRecordRepository:
 
     async def get_by_claim_id_for_update(self, claim_id: str) -> HandoverRecord | None:
         result = await self._session.execute(
-            select(HandoverRecord)
-            .where(HandoverRecord.claim_id == claim_id)
-            .with_for_update()
+            select(HandoverRecord).where(HandoverRecord.claim_id == claim_id).with_for_update()
         )
         return result.scalar_one_or_none()
 
@@ -263,9 +261,7 @@ class HandoverRecordRepository:
     async def confirm_role(self, claim_id: str, role: str) -> HandoverRecord | None:
         values = {"owner_confirmed": 1} if role == "OWNER" else {"finder_confirmed": 1}
         await self._session.execute(
-            update(HandoverRecord)
-            .where(HandoverRecord.claim_id == claim_id)
-            .values(**values)
+            update(HandoverRecord).where(HandoverRecord.claim_id == claim_id).values(**values)
         )
         result = await self._session.execute(
             select(HandoverRecord)

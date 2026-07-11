@@ -125,9 +125,7 @@ class UserCertRequestRepository:
 
     async def get_by_id_for_update(self, cert_id: str) -> UserCertRequest | None:
         result = await self._session.execute(
-            select(UserCertRequest)
-            .where(UserCertRequest.id == cert_id)
-            .with_for_update()
+            select(UserCertRequest).where(UserCertRequest.id == cert_id).with_for_update()
         )
         return result.scalar_one_or_none()
 

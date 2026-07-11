@@ -84,9 +84,7 @@ def test_image_urls_reject_unsafe_or_unlisted_hosts(url: str) -> None:
 
 def test_image_urls_accept_exact_and_wildcard_allowlist_hosts() -> None:
     exact = ClassifyItemRequest(imageUrls=["https://example.com/image.jpg"])
-    wildcard = ClassifyItemRequest(
-        imageUrls=["https://campus.objects.example.edu/image.jpg"]
-    )
+    wildcard = ClassifyItemRequest(imageUrls=["https://campus.objects.example.edu/image.jpg"])
     assert exact.image_urls == ["https://example.com/image.jpg"]
     assert wildcard.image_urls == ["https://campus.objects.example.edu/image.jpg"]
 

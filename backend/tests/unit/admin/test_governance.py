@@ -92,14 +92,18 @@ async def test_certification_review_is_pending_only_and_keeps_comment(
         )
     ).scalar_one()
     notices = (
-        await session.execute(
-            select(Notification).where(
-                Notification.user_id == USER.id,
-                Notification.related_type == "CERT",
-                Notification.related_id == cert_id,
+        (
+            await session.execute(
+                select(Notification).where(
+                    Notification.user_id == USER.id,
+                    Notification.related_type == "CERT",
+                    Notification.related_id == cert_id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert cert.review_status == "APPROVED"
     assert cert.review_comment == "资料清晰, 认证通过"
@@ -271,9 +275,7 @@ async def test_content_review_detail_contains_signed_media_publisher_and_questio
     )
     await session.commit()
 
-    response = await client.get(
-        f"/api/v1/admin/items/FOUND/{found_id}", headers=admin_headers
-    )
+    response = await client.get(f"/api/v1/admin/items/FOUND/{found_id}", headers=admin_headers)
     detail = response.json()["data"]
 
     assert response.json()["code"] == 0
@@ -330,9 +332,7 @@ async def test_valid_found_report_forces_penalty_takedown_termination_and_notice
     assert wrong_rule.json()["code"] == 40001
     assert handled.json()["code"] == 0
     assert repeated.json()["code"] == 48001
-    found = (
-        await session.execute(select(FoundItem).where(FoundItem.id == found_id))
-    ).scalar_one()
+    found = (await session.execute(select(FoundItem).where(FoundItem.id == found_id))).scalar_one()
     stored_claim = (
         await session.execute(select(ClaimRequest).where(ClaimRequest.id == claim.id))
     ).scalar_one()
@@ -418,9 +418,7 @@ async def test_claim_report_forces_fraud_penalty_and_invalid_report_does_not_pen
         await session.execute(select(LostItem).where(LostItem.id == lost.id))
     ).scalar_one()
     fraud_credit = (
-        await session.execute(
-            select(CreditLog).where(CreditLog.biz_id == claim_report.id)
-        )
+        await session.execute(select(CreditLog).where(CreditLog.biz_id == claim_report.id))
     ).scalar_one()
 
     assert handled.json()["code"] == 0
@@ -673,9 +671,7 @@ async def test_cancelled_is_terminal_and_active_claim_blocks_cancel_and_disable(
         CreateClaimRequest(foundItemId=second_found_id), governed_user
     )
 
-    cancelled_with_claim = await client.post(
-        "/api/v1/users/me/cancel", headers=auth_headers
-    )
+    cancelled_with_claim = await client.post("/api/v1/users/me/cancel", headers=auth_headers)
     disabled_with_claim = await client.post(
         f"/api/v1/admin/users/{governed_user_id}/status",
         headers=admin_headers,
@@ -685,9 +681,7 @@ async def test_cancelled_is_terminal_and_active_claim_blocks_cancel_and_disable(
     assert cancelled_with_claim.json()["code"] == 40005
     assert disabled_with_claim.json()["code"] == 40005
 
-    user = (
-        await session.execute(select(User).where(User.id == governed_user_id))
-    ).scalar_one()
+    user = (await session.execute(select(User).where(User.id == governed_user_id))).scalar_one()
     user.status = "CANCELLED"
     await session.commit()
     reactivated = await client.post(

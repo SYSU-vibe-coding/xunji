@@ -137,9 +137,7 @@ class AnnouncementRepository:
         )
         return bool(getattr(result, "rowcount", 0))
 
-    async def list_published(
-        self, *, offset: int, limit: int
-    ) -> tuple[list[Announcement], int]:
+    async def list_published(self, *, offset: int, limit: int) -> tuple[list[Announcement], int]:
         condition = Announcement.status == "PUBLISHED"
         stmt = (
             select(Announcement)

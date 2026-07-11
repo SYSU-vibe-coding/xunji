@@ -42,9 +42,7 @@ async def test_change_credit_is_idempotent_and_creates_log(session, seeded_users
     await session.commit()
 
     user = await UserService(session).get_user_internal(USER_ID)
-    logs = await svc.list_user_logs(
-        USER_ID, CreditLogQuery(pageNo=1, pageSize=10)
-    )
+    logs = await svc.list_user_logs(USER_ID, CreditLogQuery(pageNo=1, pageSize=10))
     assert changed is True
     assert repeated is False
     assert user is not None
@@ -79,9 +77,7 @@ async def test_change_credit_records_clipped_actual_delta_at_upper_bound(session
         )
     ).scalar_one()
     operation = (
-        await session.execute(
-            select(OperationLog).where(OperationLog.action == "CREDIT_CHANGE")
-        )
+        await session.execute(select(OperationLog).where(OperationLog.action == "CREDIT_CHANGE"))
     ).scalar_one()
     assert changed is True
     assert user.credit_score == 999
@@ -112,9 +108,7 @@ async def test_change_credit_records_zero_when_lower_bound_clips_all_delta(sessi
         )
     ).scalar_one()
     operation = (
-        await session.execute(
-            select(OperationLog).where(OperationLog.action == "CREDIT_CHANGE")
-        )
+        await session.execute(select(OperationLog).where(OperationLog.action == "CREDIT_CHANGE"))
     ).scalar_one()
     assert changed is True
     assert user.credit_score == 0
@@ -123,9 +117,7 @@ async def test_change_credit_records_zero_when_lower_bound_clips_all_delta(sessi
     assert operation.detail == f"{USER_ID} FAKE_PUBLISH_CONFIRMED 0 (已达积分边界) -> 0"
 
 
-async def test_unique_conflict_rolls_back_only_credit_savepoint(
-    session, seeded_users, monkeypatch
-):
+async def test_unique_conflict_rolls_back_only_credit_savepoint(session, seeded_users, monkeypatch):
     user = await UserService(session).get_user_internal(USER_ID)
     assert user is not None
     user.credit_score = 110

@@ -1182,9 +1182,7 @@ class ItemService:
             }
         raise BizError(ErrorCode.PARAM_ERROR, "bizType must be LOST or FOUND")
 
-    async def get_report_target_user_for_update(
-        self, target_type: str, target_id: str
-    ) -> str:
+    async def get_report_target_user_for_update(self, target_type: str, target_id: str) -> str:
         if target_type == "LOST_ITEM":
             lost_target = await self._lost_repo.get_by_id(target_id)
             if lost_target is not None:
@@ -1299,9 +1297,7 @@ async def _classify_and_save(
     if item is None:
         return
     images = await svc._image_repo.get_by_biz(biz_type, item_id)
-    image_urls = await svc._storage.sign_references_for_ai(
-        [image.image_url for image in images]
-    )
+    image_urls = await svc._storage.sign_references_for_ai([image.image_url for image in images])
     result = await client.classify_item(
         image_urls=image_urls,
         item_name=item.item_name,

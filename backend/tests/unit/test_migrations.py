@@ -3,10 +3,7 @@ from pathlib import Path
 
 def test_match_dedup_rewrites_references_before_delete() -> None:
     migration = (
-        Path(__file__).parents[2]
-        / "alembic"
-        / "versions"
-        / "20260711_0004_core_state_machine.py"
+        Path(__file__).parents[2] / "alembic" / "versions" / "20260711_0004_core_state_machine.py"
     ).read_text(encoding="utf-8")
 
     create_map = migration.index("CREATE TEMPORARY TABLE match_result_dedup_map")

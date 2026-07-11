@@ -67,11 +67,7 @@ class CreditService:
                     biz_id=biz_id,
                 )
                 await self._repo.create(log)
-                delta_text = (
-                    f"{actual_delta:+d}"
-                    if actual_delta != 0
-                    else "0 (已达积分边界)"
-                )
+                delta_text = f"{actual_delta:+d}" if actual_delta != 0 else "0 (已达积分边界)"
                 await self._notification_svc.create_notice(
                     user_id=user_id,
                     notice_type="CREDIT_CHANGED",

@@ -191,6 +191,17 @@ jobs:
 
       - name: Compose config smoke
         run: docker compose -f deploy/docker/docker-compose.yml config --quiet
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password-not-for-deployment
+          DB_NAME: xunji_ci
+          DB_USER: xunji_ci
+          DB_PASSWORD: ci-database-password-not-for-deployment
+          JWT_SECRET_KEY: ci-jwt-secret-key-not-for-deployment
+          ADMIN_ACCOUNT: ci-admin
+          ADMIN_PASSWORD: ci-admin-password-not-for-deployment
+          ADMIN_PHONE: "19900000000"
+          MINIO_ACCESS_KEY: ci-minio-access
+          MINIO_SECRET_KEY: ci-minio-secret-not-for-deployment
 
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t xunji/backend:ci .

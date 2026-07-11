@@ -16,9 +16,7 @@ OUTSIDER = CurrentUser(id="01OUTSIDER000000000000001", role="USER", status="ACTI
 ADMIN = CurrentUser(id="01TESTADMIN00000000000001", role="ADMIN", status="ACTIVE")
 
 
-async def test_certification_is_signed_for_applicant_and_admin_only(
-    session, seeded_users
-) -> None:
+async def test_certification_is_signed_for_applicant_and_admin_only(session, seeded_users) -> None:
     cert_ref = f"asset://CERT/{CLAIMANT.id}/202607/{'c' * 32}.jpg"
     cert = UserCertRequest(
         id=generate_ulid(),

@@ -388,9 +388,7 @@ class ClaimService:
                 or match.match_status not in {"NEW", "READ"}
             ):
                 raise BizError(ErrorCode.CLAIM_INVALID_STATE)
-            lost_item = await self._item_svc.get_lost_item_for_update_internal(
-                match.lost_item_id
-            )
+            lost_item = await self._item_svc.get_lost_item_for_update_internal(match.lost_item_id)
             if (
                 lost_item.user_id != claim.claimant_id
                 or lost_item.status != "SEARCHING"
@@ -448,17 +446,14 @@ class ClaimService:
             review_status=review_status, offset=offset, limit=page_size
         )
         items = [
-            (await self._to_admin_list_item(claim)).model_dump(by_alias=True)
-            for claim in claims
+            (await self._to_admin_list_item(claim)).model_dump(by_alias=True) for claim in claims
         ]
         return paginate(items, total, PaginationParams(pageNo=page_no, pageSize=page_size))
 
     async def get_admin_claim_detail(self, claim_id: str) -> dict[str, Any]:
         claim = await self._get_claim_or_raise(claim_id)
         detail = (
-            await self._to_detail(
-                claim, CurrentUser(id="SYSTEM", role="ADMIN", status="ACTIVE")
-            )
+            await self._to_detail(claim, CurrentUser(id="SYSTEM", role="ADMIN", status="ACTIVE"))
         ).model_dump(by_alias=True)
         summary = (await self._to_admin_list_item(claim)).model_dump(by_alias=True)
         detail.update(
@@ -732,9 +727,7 @@ class ClaimService:
 
     async def _lock_claim_and_found(self, claim_id: str) -> tuple[ClaimRequest, Any]:
         current = await self._get_claim_or_raise(claim_id)
-        found_item = await self._item_svc.get_found_item_for_update_internal(
-            current.found_item_id
-        )
+        found_item = await self._item_svc.get_found_item_for_update_internal(current.found_item_id)
         claim = await self._get_claim_for_update_or_raise(claim_id)
         if claim.found_item_id != found_item.id:
             raise BizError(ErrorCode.CLAIM_INVALID_STATE)

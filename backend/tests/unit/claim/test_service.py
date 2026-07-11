@@ -40,9 +40,7 @@ ADMIN = CurrentUser(id="01TESTADMIN00000000000001", role="ADMIN", status="ACTIVE
         ("OTHER", 60, "LEVEL_1"),
     ],
 )
-def test_determine_verify_level_is_pure_rule(
-    category: str, credit: int, expected: str
-) -> None:
+def test_determine_verify_level_is_pure_rule(category: str, credit: int, expected: str) -> None:
     assert determine_verify_level(category, credit) == expected
 
 
@@ -52,9 +50,7 @@ def test_question_scoring_averages_per_question_keyword_ratios() -> None:
         SimpleNamespace(
             id="q1", question_text="first", answer_keywords='["red", "round", "metal"]'
         ),
-        SimpleNamespace(
-            id="q2", question_text="second", answer_keywords='["engraved", "name"]'
-        ),
+        SimpleNamespace(id="q2", question_text="second", answer_keywords='["engraved", "name"]'),
     ]
     answers = [
         ClaimAnswerInput(questionId="q1", answerText="red round"),
@@ -319,9 +315,7 @@ async def test_match_claim_requires_lost_item_ownership(session, seeded_users):
     assert exc_info.value.code == ErrorCode.CLAIM_NOT_PARTY
 
 
-async def test_reject_releases_found_and_match_and_detail_hides_score(
-    session, seeded_users
-):
+async def test_reject_releases_found_and_match_and_detail_hides_score(session, seeded_users):
     item_svc = ItemService(session)
     lost = await item_svc.create_lost_item(
         CreateLostItemRequest(
@@ -457,9 +451,7 @@ async def test_level_three_with_proof_still_requires_manual_review(session, seed
     assert claim.review_status == "PENDING"
 
 
-async def test_question_failure_is_generic_persisted_and_cooled_down(
-    session, seeded_users
-):
+async def test_question_failure_is_generic_persisted_and_cooled_down(session, seeded_users):
     item_svc = ItemService(session)
     found = await item_svc.create_found_item(
         CreateFoundItemRequest(
@@ -470,9 +462,7 @@ async def test_question_failure_is_generic_persisted_and_cooled_down(
             custodyType="SELF",
             contactPreference="IN_APP",
             verifyQuestions=[
-                VerifyQuestionInput(
-                    questionText="Features?", answerKeywords=["red", "round"]
-                )
+                VerifyQuestionInput(questionText="Features?", answerKeywords=["red", "round"])
             ],
         ),
         FINDER,
@@ -491,9 +481,7 @@ async def test_question_failure_is_generic_persisted_and_cooled_down(
         await svc.create_claim(
             CreateClaimRequest(
                 foundItemId=found.id,
-                answers=[
-                    ClaimAnswerInput(questionId=question.id, answerText="red and round")
-                ],
+                answers=[ClaimAnswerInput(questionId=question.id, answerText="red and round")],
             ),
             CLAIMANT,
         )
@@ -533,9 +521,7 @@ async def test_question_failures_are_limited_to_three_per_day(session, seeded_us
             foundLocation="Office",
             custodyType="SELF",
             contactPreference="IN_APP",
-            verifyQuestions=[
-                VerifyQuestionInput(questionText="Color?", answerKeywords=["blue"])
-            ],
+            verifyQuestions=[VerifyQuestionInput(questionText="Color?", answerKeywords=["blue"])],
         ),
         FINDER,
         BackgroundTasks(),
@@ -552,15 +538,19 @@ async def test_question_failures_are_limited_to_three_per_day(session, seeded_us
             await svc.create_claim(request, CLAIMANT)
         assert failed.value.code == ErrorCode.CLAIM_ANSWER_MISMATCH
         latest = (
-            await session.execute(
-                select(ClaimRequest)
-                .where(
-                    ClaimRequest.claimant_id == CLAIMANT.id,
-                    ClaimRequest.found_item_id == found.id,
+            (
+                await session.execute(
+                    select(ClaimRequest)
+                    .where(
+                        ClaimRequest.claimant_id == CLAIMANT.id,
+                        ClaimRequest.found_item_id == found.id,
+                    )
+                    .order_by(ClaimRequest.claimed_at.desc(), ClaimRequest.id.desc())
                 )
-                .order_by(ClaimRequest.claimed_at.desc(), ClaimRequest.id.desc())
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         assert latest is not None
         latest.claimed_at -= timedelta(minutes=6 * (attempt + 1))
         await session.commit()

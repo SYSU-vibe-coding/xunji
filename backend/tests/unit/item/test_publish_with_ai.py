@@ -200,8 +200,6 @@ async def test_background_classification_saves_structured_tags_without_overridin
         "source": "VISION_MODEL",
         "degraded": False,
     }
-    assert fake_ai.classify_item.await_args.kwargs["image_urls"][0].startswith(
-        "http://minio:9000/"
-    )
+    assert fake_ai.classify_item.await_args.kwargs["image_urls"][0].startswith("http://minio:9000/")
     search = await svc.list_found_items(FoundItemQuery(keyword="蓝牙耳机"), OWNER)
     assert [item["id"] for item in search["list"]] == [created.id]

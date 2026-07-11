@@ -106,9 +106,7 @@ class NotificationService:
         await self._session.commit()
         return {"updated": count}
 
-    async def list_announcements(
-        self, *, page_no: int, page_size: int
-    ) -> dict[str, Any]:
+    async def list_announcements(self, *, page_no: int, page_size: int) -> dict[str, Any]:
         offset = (page_no - 1) * page_size
         announcements, total = await self._announcement_repo.list_published(
             offset=offset, limit=page_size
@@ -117,9 +115,7 @@ class NotificationService:
             AnnouncementListItem(
                 id=announcement.id,
                 title=announcement.title,
-                published_at=format_beijing(
-                    announcement.published_at or announcement.created_at
-                ),
+                published_at=format_beijing(announcement.published_at or announcement.created_at),
             ).model_dump(by_alias=True)
             for announcement in announcements
         ]

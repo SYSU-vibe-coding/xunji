@@ -151,12 +151,12 @@ def mock_minio(monkeypatch):
     client = MagicMock()
     client.bucket_exists.return_value = True
     client.stat_object.return_value = SimpleNamespace(size=128)
-    client.presigned_get_object.side_effect = (
-        lambda bucket, key, **kwargs: f"http://minio:9000/{bucket}/{key}?signature=ai-test"
+    client.presigned_get_object.side_effect = lambda bucket, key, **kwargs: (
+        f"http://minio:9000/{bucket}/{key}?signature=ai-test"
     )
     signer = MagicMock()
-    signer.presigned_get_object.side_effect = (
-        lambda bucket, key, **kwargs: f"https://signed.test/{bucket}/{key}?signature=test"
+    signer.presigned_get_object.side_effect = lambda bucket, key, **kwargs: (
+        f"https://signed.test/{bucket}/{key}?signature=test"
     )
     monkeypatch.setattr(storage, "_client", client)
     monkeypatch.setattr(storage, "_signing_client", signer)

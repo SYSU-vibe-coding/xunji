@@ -115,9 +115,7 @@ class ObjectStorage:
             size=len(image.data),
         )
 
-    async def validate_owned_asset(
-        self, asset_ref: str, *, user_id: str, biz_type: str
-    ) -> str:
+    async def validate_owned_asset(self, asset_ref: str, *, user_id: str, biz_type: str) -> str:
         object_key = self._new_asset_key(asset_ref)
         match = _KEY_PATTERN.fullmatch(object_key)
         if match is None or match.group("biz") != biz_type:
@@ -165,11 +163,7 @@ class ObjectStorage:
         if stable_ref is None:
             return None
         match = _KEY_PATTERN.fullmatch(stable_ref[len(ASSET_PREFIX) :])
-        if (
-            match is None
-            or match.group("user") != user_id
-            or match.group("biz") != biz_type
-        ):
+        if match is None or match.group("user") != user_id or match.group("biz") != biz_type:
             return None
         return stable_ref
 

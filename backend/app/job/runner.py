@@ -106,11 +106,7 @@ class DurableJobRunner:
         try:
             async with self._session_factory() as session:
                 job = await DurableJobRepository(session).get_for_update(claimed.id)
-                if (
-                    job is None
-                    or job.status != "RUNNING"
-                    or job.attempts != claimed.attempts
-                ):
+                if job is None or job.status != "RUNNING" or job.attempts != claimed.attempts:
                     await session.rollback()
                     return
                 await execute_durable_job(session, job, ai_client=client)
@@ -133,11 +129,7 @@ class DurableJobRunner:
         now = _utc_now()
         async with self._session_factory() as session:
             job = await DurableJobRepository(session).get_for_update(claimed.id)
-            if (
-                job is None
-                or job.status != "RUNNING"
-                or job.attempts != claimed.attempts
-            ):
+            if job is None or job.status != "RUNNING" or job.attempts != claimed.attempts:
                 await session.rollback()
                 return
             job.last_error = str(exc)[:2000]

@@ -388,9 +388,7 @@ class TestLostItemService:
     async def test_active_match_claim_blocks_all_lost_mutations(self, session, seeded_users):
         from fastapi import BackgroundTasks
 
-        finder = CurrentUser(
-            id="01TESTSTAFF00000000000001", role="STAFF", status="ACTIVE"
-        )
+        finder = CurrentUser(id="01TESTSTAFF00000000000001", role="STAFF", status="ACTIVE")
         svc = ItemService(session)
         lost = await svc.create_lost_item(
             CreateLostItemRequest(
@@ -436,12 +434,8 @@ class TestLostItemService:
 
         operations = [
             svc.update_lost_item(lost.id, update, MOCK_USER),
-            svc.change_lost_item_status(
-                lost.id, ChangeStatusRequest(status="FOUND"), MOCK_USER
-            ),
-            svc.change_lost_item_status(
-                lost.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER
-            ),
+            svc.change_lost_item_status(lost.id, ChangeStatusRequest(status="FOUND"), MOCK_USER),
+            svc.change_lost_item_status(lost.id, ChangeStatusRequest(status="CLOSED"), MOCK_USER),
             svc.delete_lost_item(lost.id, MOCK_USER),
         ]
         for operation in operations:
@@ -659,9 +653,7 @@ class TestFoundItemService:
 
         assert result["status"] == "CLOSED"
 
-    async def test_close_found_terminates_claim_expires_match_and_notifies_parties(
-        self, session
-    ):
+    async def test_close_found_terminates_claim_expires_match_and_notifies_parties(self, session):
         from fastapi import BackgroundTasks
 
         svc = ItemService(session)
@@ -855,9 +847,7 @@ class TestFoundItemService:
         assert detail["imageRefs"] == [FOUND_REF_2]
         assert [q["questionText"] for q in detail["verifyQuestions"]] == ["New question?"]
 
-    async def test_update_found_item_expires_old_match_and_schedules_recalculation(
-        self, session
-    ):
+    async def test_update_found_item_expires_old_match_and_schedules_recalculation(self, session):
         from fastapi import BackgroundTasks
 
         svc = ItemService(session)
@@ -983,9 +973,7 @@ class TestFoundItemService:
             )
         assert exc_info.value.code == ErrorCode.REPORT_DUPLICATE
 
-    async def test_report_unique_conflict_maps_to_duplicate(
-        self, session, monkeypatch
-    ):
+    async def test_report_unique_conflict_maps_to_duplicate(self, session, monkeypatch):
         from fastapi import BackgroundTasks
 
         svc = ItemService(session)
@@ -1005,12 +993,8 @@ class TestFoundItemService:
         async def stale_precheck(**kwargs):
             return False
 
-        monkeypatch.setattr(
-            svc._report_repo, "exists_by_reporter_and_target", stale_precheck
-        )
-        request = SubmitReportRequest(
-            targetType="FOUND_ITEM", targetId=created.id, reason="SPAM"
-        )
+        monkeypatch.setattr(svc._report_repo, "exists_by_reporter_and_target", stale_precheck)
+        request = SubmitReportRequest(targetType="FOUND_ITEM", targetId=created.id, reason="SPAM")
         await svc.submit_report(request, OTHER_USER)
 
         with pytest.raises(BizError) as exc_info:

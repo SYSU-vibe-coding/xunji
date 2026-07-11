@@ -116,9 +116,10 @@ def normalized_total(
     if image_available and lost.get("imageUrls") and found.get("imageUrls"):
         weighted += image_score * WEIGHT_IMAGE
         available_weight += WEIGHT_IMAGE
-    if _combine(lost.get("name"), lost.get("description")).strip() and _combine(
-        found.get("name"), found.get("description")
-    ).strip():
+    if (
+        _combine(lost.get("name"), lost.get("description")).strip()
+        and _combine(found.get("name"), found.get("description")).strip()
+    ):
         weighted += text_score * WEIGHT_TEXT
         available_weight += WEIGHT_TEXT
     if lost.get("location") and found.get("location"):

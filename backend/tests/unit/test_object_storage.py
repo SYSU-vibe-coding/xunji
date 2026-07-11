@@ -18,9 +18,7 @@ def _png_bytes(*, metadata: bool = False) -> bytes:
     if metadata:
         pnginfo = PngImagePlugin.PngInfo()
         pnginfo.add_text("private", "must-be-removed")
-    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(
-        output, format="PNG", pnginfo=pnginfo
-    )
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(output, format="PNG", pnginfo=pnginfo)
     return output.getvalue()
 
 
@@ -38,9 +36,7 @@ async def test_upload_uses_real_format_reencodes_and_strips_metadata(mock_minio)
         user_id="01TESTUSER000000000000001",
     )
 
-    assert stored.asset_ref.startswith(
-        "asset://FOUND/01TESTUSER000000000000001/"
-    )
+    assert stored.asset_ref.startswith("asset://FOUND/01TESTUSER000000000000001/")
     assert stored.asset_ref.endswith(".png")
     assert stored.content_type == "image/png"
     assert stored.preview_url.startswith("https://signed.test/")
@@ -133,9 +129,10 @@ async def test_legacy_project_minio_url_is_resigned_but_external_url_is_hidden(
         )
         is None
     )
-    assert await mock_minio.storage.sign_reference(
-        "https://example.com/image.jpg", sensitive=False
-    ) is None
+    assert (
+        await mock_minio.storage.sign_reference("https://example.com/image.jpg", sensitive=False)
+        is None
+    )
     assert mock_minio.signer.presigned_get_object.call_args.kwargs["expires"] == timedelta(
         hours=settings.MINIO_URL_EXPIRE_HOURS
     )

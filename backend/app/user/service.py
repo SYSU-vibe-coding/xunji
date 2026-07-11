@@ -63,9 +63,7 @@ class UserService:
 
     async def send_sms_code(self, req: SmsCodeRequest) -> SmsCodeResponse:
         is_demo_phone = (
-            settings.DEBUG
-            and settings.SMS_DEBUG_ENABLED
-            and req.phone in settings.sms_demo_phones
+            settings.DEBUG and settings.SMS_DEBUG_ENABLED and req.phone in settings.sms_demo_phones
         )
         if not is_demo_phone and self._sms_sender is None:
             raise BizError(

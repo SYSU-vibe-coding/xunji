@@ -75,9 +75,7 @@ class TestRuntimeSecurity:
 
 
 class TestAdminBootstrap:
-    async def test_disabled_bootstrap_creates_nothing(
-        self, session: AsyncSession, monkeypatch
-    ):
+    async def test_disabled_bootstrap_creates_nothing(self, session: AsyncSession, monkeypatch):
         monkeypatch.setattr(settings, "BOOTSTRAP_ADMIN_ENABLED", False)
         monkeypatch.setattr(settings, "ADMIN_PHONE", "19900000100")
         _use_test_session(monkeypatch, session)

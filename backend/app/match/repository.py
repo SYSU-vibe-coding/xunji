@@ -155,9 +155,7 @@ class MatchResultRepository:
         return list(result.scalars().all()), total_result.scalar() or 0
 
     async def expire_by_item(self, biz_type: str, item_id: str) -> int:
-        item_column = (
-            MatchResult.lost_item_id if biz_type == "LOST" else MatchResult.found_item_id
-        )
+        item_column = MatchResult.lost_item_id if biz_type == "LOST" else MatchResult.found_item_id
         result = await self._session.execute(
             update(MatchResult)
             .where(
@@ -191,9 +189,7 @@ class MatchResultRepository:
         )
         return cast(int, getattr(result, "rowcount", 0)) == 1
 
-    async def expire_by_items(
-        self, *, lost_item_ids: list[str], found_item_ids: list[str]
-    ) -> int:
+    async def expire_by_items(self, *, lost_item_ids: list[str], found_item_ids: list[str]) -> int:
         item_conditions = []
         if lost_item_ids:
             item_conditions.append(MatchResult.lost_item_id.in_(lost_item_ids))

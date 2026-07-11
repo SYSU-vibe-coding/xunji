@@ -35,14 +35,8 @@ class DurableJobRepository:
             select(DurableJob)
             .where(
                 or_(
-                    (
-                        (DurableJob.status == "PENDING")
-                        & (DurableJob.run_after <= now)
-                    ),
-                    (
-                        (DurableJob.status == "RUNNING")
-                        & (DurableJob.locked_at <= stale_before)
-                    ),
+                    ((DurableJob.status == "PENDING") & (DurableJob.run_after <= now)),
+                    ((DurableJob.status == "RUNNING") & (DurableJob.locked_at <= stale_before)),
                 )
             )
             .order_by(DurableJob.run_after.asc(), DurableJob.created_at.asc())

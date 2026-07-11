@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
+import { hasAdminRouteAccess } from '@/utils/auth-session';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -24,6 +25,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/CertificationListView.vue'),
       },
       { path: 'reviews', name: 'reviews', component: () => import('@/views/ContentReviewView.vue') },
+      {
+        path: 'claim-appeals',
+        name: 'claim-appeals',
+        component: () => import('@/views/ClaimAppealView.vue'),
+      },
       { path: 'reports', name: 'reports', component: () => import('@/views/ReportListView.vue') },
       {
         path: 'announcements',
@@ -50,14 +56,14 @@ const router = createRouter({
   },
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore();
+  if (!auth.initialized) await auth.restore();
   const isPublic = to.matched.some((r) => r.meta?.public);
   if (!isPublic) {
-    if (!auth.token) return { name: 'admin-login', query: { redirect: to.fullPath } };
-    if (auth.profile && auth.profile.role !== 'ADMIN') {
-      auth.clear();
-      return { name: 'admin-login' };
+    if (!hasAdminRouteAccess(auth.token, auth.profile, auth.initialized)) {
+      if (auth.profile && auth.profile.role !== 'ADMIN') auth.clear();
+      return { name: 'admin-login', query: { redirect: to.fullPath } };
     }
   }
   if (isPublic && auth.token && auth.profile?.role === 'ADMIN' && to.name === 'admin-login') {

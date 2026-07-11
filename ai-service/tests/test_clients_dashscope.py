@@ -1,11 +1,27 @@
 """DashScope client unit tests using httpx.MockTransport (no real network)."""
 
+import base64
 import json
 
 import httpx
 import pytest
 from app.clients.dashscope import DashScopeClient
+from app.clients.image_fetcher import MAX_IMAGE_BYTES
 from app.core.config import settings
+from app.schemas import CalculateMatchRequest, MatchItem
+from app.services import match
+
+PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
+async def _public_resolver(_host: str, _port: int) -> tuple[str, ...]:
+    return ("8.8.8.8",)
+
+
+def _image_response(content: bytes = PNG_BYTES) -> httpx.Response:
+    return httpx.Response(200, content=content, headers={"Content-Type": "image/png"})
 
 
 def _embedding_response(vectors: list[list[float]]) -> httpx.Response:
@@ -81,12 +97,17 @@ async def test_text_embedding_count_mismatch_returns_none() -> None:
 
 @pytest.mark.asyncio
 async def test_vl_understand_success() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def provider_handler(request: httpx.Request) -> httpx.Response:
         return _vl_response("CERT")
 
-    client = DashScopeClient(api_key="fake", transport=httpx.MockTransport(handler))
+    client = DashScopeClient(
+        api_key="fake",
+        transport=httpx.MockTransport(provider_handler),
+        image_transport=httpx.MockTransport(lambda _request: _image_response()),
+        image_resolver=_public_resolver,
+    )
     try:
-        reply = await client.vl_understand("http://img", "classify please")
+        reply = await client.vl_understand("https://example.com/img", "classify please")
         assert reply == "CERT"
     finally:
         await client.aclose()
@@ -94,24 +115,182 @@ async def test_vl_understand_success() -> None:
 
 @pytest.mark.asyncio
 async def test_vl_understand_string_content() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def provider_handler(request: httpx.Request) -> httpx.Response:
         body = {"output": {"choices": [{"message": {"content": "ELECTRONIC"}}]}}
         return httpx.Response(200, content=json.dumps(body))
 
-    client = DashScopeClient(api_key="fake", transport=httpx.MockTransport(handler))
+    client = DashScopeClient(
+        api_key="fake",
+        transport=httpx.MockTransport(provider_handler),
+        image_transport=httpx.MockTransport(lambda _request: _image_response()),
+        image_resolver=_public_resolver,
+    )
     try:
-        assert await client.vl_understand("http://img", "?") == "ELECTRONIC"
+        assert await client.vl_understand("https://example.com/img", "?") == "ELECTRONIC"
     finally:
         await client.aclose()
 
 
 @pytest.mark.asyncio
 async def test_vl_understand_timeout_returns_none() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def provider_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectTimeout("simulated", request=request)
+
+    client = DashScopeClient(
+        api_key="fake",
+        transport=httpx.MockTransport(provider_handler),
+        image_transport=httpx.MockTransport(lambda _request: _image_response()),
+        image_resolver=_public_resolver,
+    )
+    try:
+        assert await client.vl_understand("https://example.com/img", "?") is None
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_vl_rejects_untrusted_url_before_provider_call() -> None:
+    called = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return _vl_response("CERT")
 
     client = DashScopeClient(api_key="fake", transport=httpx.MockTransport(handler))
     try:
-        assert await client.vl_understand("http://img", "?") is None
+        assert await client.vl_understand("http://127.0.0.1/private", "?") is None
+        assert called is False
     finally:
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_private_image_is_downloaded_and_provider_receives_data_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "AI_TRUSTED_PRIVATE_IMAGE_HOSTS", "minio")
+    private_url = "http://minio:9000/xunji/photo.png?X-Amz-Signature=secret"
+
+    def image_handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == private_url
+        assert "authorization" not in request.headers
+        return _image_response()
+
+    def provider_handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        image_source = payload["input"]["messages"][0]["content"][0]["image"]
+        assert image_source.startswith("data:image/png;base64,")
+        assert "minio" not in request.content.decode()
+        assert "X-Amz-Signature" not in request.content.decode()
+        return _vl_response("CERT")
+
+    client = DashScopeClient(
+        api_key="fake",
+        transport=httpx.MockTransport(provider_handler),
+        image_transport=httpx.MockTransport(image_handler),
+    )
+    try:
+        assert await client.vl_understand(private_url, "classify") == "CERT"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_vl_rejects_image_over_ten_megabytes_before_provider_call() -> None:
+    provider_called = False
+
+    def image_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={
+                "Content-Type": "image/png",
+                "Content-Length": str(MAX_IMAGE_BYTES + 1),
+            },
+        )
+
+    def provider_handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal provider_called
+        provider_called = True
+        return _vl_response("CERT")
+
+    client = DashScopeClient(
+        api_key="fake",
+        transport=httpx.MockTransport(provider_handler),
+        image_transport=httpx.MockTransport(image_handler),
+        image_resolver=_public_resolver,
+    )
+    try:
+        assert await client.vl_understand("https://example.com/large.png", "?") is None
+        assert provider_called is False
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_vl_revalidates_redirect_and_rejects_private_ssrf() -> None:
+    fetched_urls: list[str] = []
+    provider_called = False
+
+    def image_handler(request: httpx.Request) -> httpx.Response:
+        fetched_urls.append(str(request.url))
+        return httpx.Response(302, headers={"Location": "http://169.254.169.254/latest"})
+
+    def provider_handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal provider_called
+        provider_called = True
+        return _vl_response("CERT")
+
+    client = DashScopeClient(
+        api_key="fake",
+        transport=httpx.MockTransport(provider_handler),
+        image_transport=httpx.MockTransport(image_handler),
+        image_resolver=_public_resolver,
+    )
+    try:
+        assert await client.vl_understand("https://example.com/image.png", "?") is None
+        assert fetched_urls == ["https://example.com/image.png"]
+        assert provider_called is False
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_match_llm_prompt_contains_only_name_and_description(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_MODEL", "text-model")
+    captured_payloads: list[dict[str, object]] = []
+
+    def provider_handler(request: httpx.Request) -> httpx.Response:
+        captured_payloads.append(json.loads(request.content))
+        return httpx.Response(200, content=json.dumps({"output": {"text": "82"}}))
+
+    client = DashScopeClient(api_key="fake", transport=httpx.MockTransport(provider_handler))
+    req = CalculateMatchRequest(
+        lostItem=MatchItem(
+            name="lost-name-marker",
+            description="lost-description-marker",
+            location="lost-location-marker",
+            time="2026-07-11T09:31:27+00:00",
+        ),
+        foundItem=MatchItem(
+            name="found-name-marker",
+            description="found-description-marker",
+            location="found-location-marker",
+            time="2026-07-11T10:42:38+00:00",
+        ),
+    )
+    try:
+        response = await match.calculate_match(req, client)
+    finally:
+        await client.aclose()
+
+    prompt_payload = json.dumps(captured_payloads, ensure_ascii=False)
+    assert response.text_score == 82.0
+    assert "lost-name-marker lost-description-marker" in prompt_payload
+    assert "found-name-marker found-description-marker" in prompt_payload
+    assert "lost-location-marker" not in prompt_payload
+    assert "found-location-marker" not in prompt_payload
+    assert "09:31:27" not in prompt_payload
+    assert "10:42:38" not in prompt_payload

@@ -26,16 +26,21 @@ def test_detect_sensitive_card() -> None:
         DetectSensitiveRequest(imageUrl="https://example.com/campus-card.jpg")
     )
     assert resp.is_sensitive is True
-    assert resp.masked_image_url is not None
+    assert resp.masked_image_url is None
     assert resp.sensitive_type == "CAMPUS_CARD"
+    assert resp.degraded is True
+    assert resp.needs_review is True
 
 
 def test_detect_sensitive_negative() -> None:
     resp = _baseline.detect_sensitive(
         DetectSensitiveRequest(imageUrl="https://example.com/umbrella.jpg")
     )
-    assert resp.is_sensitive is False
+    assert resp.is_sensitive is True
     assert resp.masked_image_url is None
+    assert resp.sensitive_type is None
+    assert resp.degraded is True
+    assert resp.needs_review is True
 
 
 def test_calculate_match_score() -> None:
@@ -56,6 +61,7 @@ def test_calculate_match_uses_backend_fallback_scores() -> None:
                 name="black umbrella",
                 location="library",
                 time="2026-04-30T08:00:00",
+                timeEnd="2026-04-30T10:00:00",
                 imageUrls=["https://example.com/lost.jpg"],
             ),
             foundItem=MatchItem(
@@ -66,18 +72,29 @@ def test_calculate_match_uses_backend_fallback_scores() -> None:
             ),
         )
     )
-    assert resp.image_score == 60.0
+    assert resp.image_score == 0.0
+    assert resp.image_available is False
+    assert resp.degraded is True
+    assert resp.score_source == "RULE_BASED"
     assert resp.text_score == 100.0
     assert resp.location_score == 100.0
-    assert resp.time_score == 99.92
-    assert resp.total_score == 83.99
+    assert resp.time_score == 100.0
+    assert resp.total_score == 100.0
 
 
-def test_time_score_decays_with_days() -> None:
-    near = _baseline.time_score_value("2026-04-30T08:00:00", "2026-04-30T09:00:00")
-    far = _baseline.time_score_value("2026-04-30T08:00:00", "2026-05-03T08:00:00")
-    assert near > far
-    assert far == 94.0  # 3 days * 2 = 6 → 100 - 6 = 94
+def test_time_score_uses_interval_and_decays_by_hour() -> None:
+    inside = _baseline.time_score_value(
+        "2026-04-30T08:00:00",
+        "2026-04-30T09:00:00",
+        "2026-04-30T10:00:00",
+    )
+    after = _baseline.time_score_value(
+        "2026-04-30T08:00:00",
+        "2026-04-30T13:00:00",
+        "2026-04-30T10:00:00",
+    )
+    assert inside == 100.0
+    assert after == 94.0
 
 
 def test_time_score_zero_when_one_missing() -> None:

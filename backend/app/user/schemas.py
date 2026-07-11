@@ -41,8 +41,7 @@ class SmsCodeRequest(BaseModel):
 class SmsCodeResponse(BaseModel):
     sent: bool
     expires_in: int
-    # Local development returns the code until a real SMS provider is configured.
-    debug_code: str
+    debug_code: str | None = None
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
@@ -79,6 +78,7 @@ class UserProfileResponse(BaseModel):
     phone: str  # masked
     nickname: str
     avatar_url: str | None = None
+    avatar_ref: str | None = None
     role: str
     cert_status: str
     campus_id: str | None = None
@@ -90,7 +90,7 @@ class UserProfileResponse(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     nickname: str | None = Field(None, min_length=2, max_length=20)
-    avatar_url: str | None = Field(None, alias="avatarUrl")
+    avatar_ref: str | None = Field(None, alias="avatarRef")
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
@@ -100,7 +100,7 @@ class UpdateProfileRequest(BaseModel):
 class CertificationRequest(BaseModel):
     campus_id: str = Field(..., min_length=4, max_length=20, pattern=r"^[A-Za-z0-9]+$")
     real_name: str = Field(..., min_length=2, max_length=20)
-    document_image_url: str = Field(..., min_length=1)
+    document_image_ref: str = Field(..., min_length=1)
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
@@ -108,7 +108,8 @@ class CertificationResponse(BaseModel):
     id: str
     campus_id: str
     real_name: str | None = None
-    document_image_url: str
+    document_image_url: str | None = None
+    document_image_ref: str | None = None
     review_status: str
     review_comment: str | None = None
     reviewed_at: str | None = None

@@ -12,13 +12,15 @@ context, so each request reuses the underlying ``httpx.AsyncClient`` pool.
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 
 from app.clients.dashscope import DashScopeClient
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.schemas import (
     CalculateMatchRequest,
     CalculateMatchResponse,
@@ -44,31 +46,60 @@ def _client(request: Request) -> DashScopeClient | None:
     return getattr(request.app.state, "dashscope", None)
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION, lifespan=lifespan)
+SERVICE_TOKEN_HEADER = "X-Service-Token"
+
+
+def create_app(app_settings: Settings | None = None) -> FastAPI:
+    runtime_settings = app_settings or settings
+    app = FastAPI(
+        title=runtime_settings.APP_NAME,
+        version=runtime_settings.APP_VERSION,
+        lifespan=lifespan,
+    )
+
+    async def require_service_token(
+        supplied_token: Annotated[str | None, Header(alias=SERVICE_TOKEN_HEADER)] = None,
+    ) -> None:
+        expected_token = runtime_settings.AI_SERVICE_TOKEN
+        if runtime_settings.AI_LOCAL_DEV_MODE and not expected_token:
+            return
+        token_matches = supplied_token is not None and secrets.compare_digest(
+            supplied_token.encode(), expected_token.encode()
+        )
+        if not token_matches:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid service token",
+            )
+
+    internal = APIRouter(
+        prefix="/internal/ai",
+        dependencies=[Depends(require_service_token)],
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str | bool]:
-        return {"status": "ok", "dashscope": settings.use_dashscope}
+        return {"status": "ok", "dashscope": runtime_settings.use_dashscope}
 
-    @app.post("/internal/ai/classify-item")
+    @internal.post("/classify-item")
     async def classify_item_endpoint(
         req: ClassifyItemRequest, request: Request
     ) -> ClassifyItemResponse:
         return await classify.classify_item(req, _client(request))
 
-    @app.post("/internal/ai/detect-sensitive")
+    @internal.post("/detect-sensitive")
     async def detect_sensitive_endpoint(
         req: DetectSensitiveRequest, request: Request
     ) -> DetectSensitiveResponse:
         return await sensitive.detect_sensitive(req, _client(request))
 
-    @app.post("/internal/ai/calculate-match")
+    @internal.post("/calculate-match")
     async def calculate_match_endpoint(
         req: CalculateMatchRequest, request: Request
     ) -> CalculateMatchResponse:
         return await match.calculate_match(req, _client(request))
 
+    app.include_router(internal)
     return app
 
 

@@ -20,7 +20,7 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, stored_hash: str) -> bool:
     parts = stored_hash.split("$")
     if len(parts) != 4 or parts[0] != PASSWORD_HASH_ALGORITHM:
-        return hmac.compare_digest(stored_hash, password)
+        return False
 
     _, iterations_raw, salt, expected = parts
     try:

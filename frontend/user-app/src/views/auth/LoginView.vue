@@ -44,6 +44,7 @@ const submitting = ref(false);
 const countdown = ref(0);
 
 async function handleSendCode() {
+  if (sendingCode.value || countdown.value > 0) return;
   if (!/^1\d{10}$/.test(smsForm.phone)) {
     ElMessage.warning('请先输入正确的手机号');
     return;
@@ -70,63 +71,70 @@ async function handleSendCode() {
 }
 
 async function afterLogin() {
-  await auth.loadProfile();
-  await notice.refresh();
+  try {
+    await auth.loadProfile();
+  } catch {
+    auth.clear();
+    throw new Error('账户信息加载失败，登录状态已回滚，请重试');
+  }
+  await notice.refresh().catch(() => {});
   const redirect = (route.query.redirect as string) || '/';
   void router.push(redirect);
 }
 
 async function submitPassword() {
-  if (!passwordFormRef.value) {
-    ElMessage.warning('页面尚未就绪，请稍后再试');
-    return;
-  }
-  let valid = false;
-  try {
-    valid = await passwordFormRef.value.validate();
-  } catch {
-    valid = false;
-  }
-  if (!valid) {
-    ElMessage.warning('请完整填写登录信息');
-    return;
-  }
+  if (submitting.value) return;
   submitting.value = true;
   try {
+    if (!passwordFormRef.value) {
+      ElMessage.warning('页面尚未就绪，请稍后再试');
+      return;
+    }
+    let valid = false;
+    try {
+      valid = await passwordFormRef.value.validate();
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      ElMessage.warning('请完整填写登录信息');
+      return;
+    }
     const data = await loginByPassword(passwordForm.phone, passwordForm.password);
     auth.setSession(data);
-    ElMessage.success('登录成功');
     await afterLogin();
+    ElMessage.success('登录成功');
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '登录失败');
+    ElMessage.error(err instanceof ApiError || err instanceof Error ? err.message : '登录失败');
   } finally {
     submitting.value = false;
   }
 }
 
 async function submitSms() {
-  if (!smsFormRef.value) {
-    ElMessage.warning('页面尚未就绪，请稍后再试');
-    return;
-  }
-  let valid = false;
-  try {
-    valid = await smsFormRef.value.validate();
-  } catch {
-    valid = false;
-  }
-  if (!valid) {
-    ElMessage.warning('请完整填写登录信息');
-    return;
-  }
+  if (submitting.value) return;
   submitting.value = true;
   try {
+    if (!smsFormRef.value) {
+      ElMessage.warning('页面尚未就绪，请稍后再试');
+      return;
+    }
+    let valid = false;
+    try {
+      valid = await smsFormRef.value.validate();
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      ElMessage.warning('请完整填写登录信息');
+      return;
+    }
     const data = await loginBySmsCode(smsForm.phone, smsForm.code);
     auth.setSession(data);
-    ElMessage.success('登录成功');
     await afterLogin();
+    ElMessage.success('登录成功');
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '登录失败');
+    ElMessage.error(err instanceof ApiError || err instanceof Error ? err.message : '登录失败');
   } finally {
     submitting.value = false;
   }

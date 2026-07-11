@@ -66,6 +66,7 @@ CREATE TABLE `lost_items` (
   `subscribe_match` TINYINT      NOT NULL DEFAULT 0,
   `status`          VARCHAR(20)  NOT NULL DEFAULT 'SEARCHING' COMMENT 'SEARCHING / FOUND / CLOSED',
   `review_status`   VARCHAR(20)  NOT NULL DEFAULT 'APPROVED' COMMENT 'PENDING / APPROVED / REJECTED',
+  `review_comment`  VARCHAR(255) DEFAULT NULL,
   `ai_tags`         VARCHAR(255) DEFAULT NULL,
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -93,6 +94,7 @@ CREATE TABLE `found_items` (
   `contact_preference` VARCHAR(30)  NOT NULL COMMENT 'IN_APP / PHONE',
   `status`             VARCHAR(20)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / CLAIMING / RETURNED / CLOSED',
   `review_status`      VARCHAR(20)  NOT NULL DEFAULT 'APPROVED' COMMENT 'PENDING / APPROVED / REJECTED',
+  `review_comment`     VARCHAR(255) DEFAULT NULL,
   `ai_tags`            VARCHAR(255) DEFAULT NULL,
   `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -145,10 +147,14 @@ CREATE TABLE `match_results` (
   `text_score`     DECIMAL(5,2)  DEFAULT 0.00,
   `location_score` DECIMAL(5,2)  DEFAULT 0.00,
   `time_score`     DECIMAL(5,2)  DEFAULT 0.00,
-  `total_score`    DECIMAL(5,2)  DEFAULT 0.00 COMMENT '0.4*img + 0.3*txt + 0.2*loc + 0.1*time',
+  `total_score`    DECIMAL(5,2)  DEFAULT 0.00 COMMENT '按实际可用维度归一后的综合分',
+  `image_available` TINYINT      NOT NULL DEFAULT 0 COMMENT '是否有真实图像模型参与',
+  `degraded`        TINYINT      NOT NULL DEFAULT 1 COMMENT '是否包含规则降级维度',
+  `score_source`    VARCHAR(32)  NOT NULL DEFAULT 'RULE_BASED' COMMENT '评分来源',
   `match_status`   VARCHAR(20)   NOT NULL DEFAULT 'NEW' COMMENT 'NEW / READ / CLAIMED / EXPIRED',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_match_lost_found` (`lost_item_id`, `found_item_id`),
   KEY `idx_match_lost_item` (`lost_item_id`),
   KEY `idx_match_found_item` (`found_item_id`),
   KEY `idx_match_total_score` (`total_score`)
@@ -163,8 +169,8 @@ CREATE TABLE `claim_requests` (
   `match_id`      CHAR(26)     DEFAULT NULL,
   `found_item_id` CHAR(26)     NOT NULL,
   `claimant_id`   CHAR(26)     NOT NULL,
-  `verify_level`  VARCHAR(20)  NOT NULL COMMENT 'LEVEL_1 / LEVEL_2 / LEVEL_3 / FAST_TRACK',
-  `review_status` VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+  `verify_level`  VARCHAR(20)  NOT NULL COMMENT 'LEVEL_1 / LEVEL_2 / LEVEL_3',
+  `review_status` VARCHAR(20)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / ANSWER_PASSED / PROOF_PENDING / APPROVED / REJECTED / APPEALING / HANDED_OVER / TERMINATED',
   `reject_reason` VARCHAR(255) DEFAULT NULL,
   `proof_text`    VARCHAR(500) DEFAULT NULL COMMENT '认领者补充凭证说明',
   `appeal_reason` VARCHAR(500) DEFAULT NULL COMMENT '申诉理由',
@@ -201,13 +207,14 @@ CREATE TABLE `handover_records` (
   `id`                CHAR(26)     NOT NULL,
   `claim_id`          CHAR(26)     NOT NULL,
   `method`            VARCHAR(20)  NOT NULL COMMENT 'MEETUP / PICKUP_POINT',
-  `handover_location` VARCHAR(255) DEFAULT NULL,
-  `handover_time`     DATETIME     DEFAULT NULL,
+  `handover_location` VARCHAR(255) NOT NULL,
+  `handover_time`     DATETIME     NOT NULL,
   `owner_confirmed`   TINYINT      NOT NULL DEFAULT 0,
   `finder_confirmed`  TINYINT      NOT NULL DEFAULT 0,
   `completed_at`      DATETIME     DEFAULT NULL,
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_handover_claim` (`claim_id`),
   KEY `idx_handover_claim` (`claim_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='交接记录表';
 
@@ -269,6 +276,7 @@ CREATE TABLE `reports` (
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_report_reporter` (`reporter_id`),
+  UNIQUE KEY `uk_report_reporter_target` (`reporter_id`, `target_type`, `target_id`),
   KEY `idx_report_status` (`handle_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='举报表';
 
@@ -306,5 +314,31 @@ CREATE TABLE `operation_logs` (
   KEY `idx_oplog_operator` (`operator_id`),
   KEY `idx_oplog_biz` (`biz_type`, `biz_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志表';
+
+-- -----------------------------------------------------------
+-- 16. durable_jobs 持久化任务/outbox 表
+-- -----------------------------------------------------------
+DROP TABLE IF EXISTS `durable_jobs`;
+CREATE TABLE `durable_jobs` (
+  `id`          CHAR(26)      NOT NULL,
+  `job_type`    VARCHAR(20)   NOT NULL COMMENT 'MATCH / CLASSIFY / SENSITIVE',
+  `biz_type`    VARCHAR(20)   NOT NULL COMMENT 'LOST / FOUND',
+  `biz_id`      CHAR(26)      NOT NULL,
+  `biz_version` INT           NOT NULL,
+  `status`      VARCHAR(20)   NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / RUNNING / COMPLETED / FAILED',
+  `attempts`    INT           NOT NULL DEFAULT 0,
+  `run_after`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `locked_at`   DATETIME      DEFAULT NULL,
+  `last_error`  VARCHAR(2000) DEFAULT NULL,
+  `created_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_durable_job_type_biz_version` (`job_type`, `biz_type`, `biz_id`, `biz_version`),
+  KEY `idx_durable_jobs_claim` (`status`, `run_after`, `created_at`),
+  KEY `idx_durable_jobs_biz` (`biz_type`, `biz_id`, `biz_version`),
+  CONSTRAINT `ck_durable_jobs_job_type` CHECK (`job_type` IN ('MATCH', 'CLASSIFY', 'SENSITIVE')),
+  CONSTRAINT `ck_durable_jobs_biz_type` CHECK (`biz_type` IN ('LOST', 'FOUND')),
+  CONSTRAINT `ck_durable_jobs_status` CHECK (`status` IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='持久化任务/outbox 表';
 
 SET FOREIGN_KEY_CHECKS = 1;

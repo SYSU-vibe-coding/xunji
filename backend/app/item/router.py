@@ -45,6 +45,8 @@ async def list_lost_items(
     status: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     location: str | None = Query(default=None),
+    event_time_start: str | None = Query(default=None, alias="eventTimeStart"),
+    event_time_end: str | None = Query(default=None, alias="eventTimeEnd"),
     sort_by: str = Query(default="CREATED_DESC", alias="sortBy"),
     include_closed: bool = Query(default=False, alias="includeClosed"),
     current_user: CurrentUser = Depends(get_current_user),
@@ -57,10 +59,12 @@ async def list_lost_items(
         status=status,
         keyword=keyword,
         location=location,
+        eventTimeStart=event_time_start,
+        eventTimeEnd=event_time_end,
         sortBy=sort_by,
         includeClosed=include_closed,
     )
-    data = await svc.list_lost_items(query)
+    data = await svc.list_lost_items(query, current_user)
     return success(data=data)
 
 
@@ -72,6 +76,8 @@ async def list_my_lost_items(
     status: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     location: str | None = Query(default=None),
+    event_time_start: str | None = Query(default=None, alias="eventTimeStart"),
+    event_time_end: str | None = Query(default=None, alias="eventTimeEnd"),
     sort_by: str = Query(default="CREATED_DESC", alias="sortBy"),
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
@@ -83,6 +89,8 @@ async def list_my_lost_items(
         status=status,
         keyword=keyword,
         location=location,
+        eventTimeStart=event_time_start,
+        eventTimeEnd=event_time_end,
         sortBy=sort_by,
         includeClosed=True,
     )
@@ -105,11 +113,12 @@ async def get_lost_item(
 async def update_lost_item(
     item_id: str,
     req: UpdateLostItemRequest,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
     item_id = validate_ulid(item_id, "itemId")
-    data = await svc.update_lost_item(item_id, req, current_user)
+    data = await svc.update_lost_item(item_id, req, current_user, background_tasks)
     return success(data=data)
 
 
@@ -169,6 +178,8 @@ async def list_found_items(
     status: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     location: str | None = Query(default=None),
+    event_time_start: str | None = Query(default=None, alias="eventTimeStart"),
+    event_time_end: str | None = Query(default=None, alias="eventTimeEnd"),
     is_sensitive: bool | None = Query(default=None, alias="isSensitive"),
     custody_type: str | None = Query(default=None, alias="custodyType"),
     sort_by: str = Query(default="CREATED_DESC", alias="sortBy"),
@@ -183,12 +194,14 @@ async def list_found_items(
         status=status,
         keyword=keyword,
         location=location,
+        eventTimeStart=event_time_start,
+        eventTimeEnd=event_time_end,
         isSensitive=is_sensitive,
         custodyType=custody_type,
         sortBy=sort_by,
         includeClosed=include_closed,
     )
-    data = await svc.list_found_items(query)
+    data = await svc.list_found_items(query, current_user)
     return success(data=data)
 
 
@@ -200,6 +213,8 @@ async def list_my_found_items(
     status: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     location: str | None = Query(default=None),
+    event_time_start: str | None = Query(default=None, alias="eventTimeStart"),
+    event_time_end: str | None = Query(default=None, alias="eventTimeEnd"),
     is_sensitive: bool | None = Query(default=None, alias="isSensitive"),
     custody_type: str | None = Query(default=None, alias="custodyType"),
     sort_by: str = Query(default="CREATED_DESC", alias="sortBy"),
@@ -213,6 +228,8 @@ async def list_my_found_items(
         status=status,
         keyword=keyword,
         location=location,
+        eventTimeStart=event_time_start,
+        eventTimeEnd=event_time_end,
         isSensitive=is_sensitive,
         custodyType=custody_type,
         sortBy=sort_by,
@@ -237,11 +254,12 @@ async def get_found_item(
 async def update_found_item(
     item_id: str,
     req: UpdateFoundItemRequest,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
     svc: ItemService = Depends(get_item_service),
 ) -> dict[str, Any]:
     item_id = validate_ulid(item_id, "itemId")
-    data = await svc.update_found_item(item_id, req, current_user)
+    data = await svc.update_found_item(item_id, req, current_user, background_tasks)
     return success(data=data)
 
 

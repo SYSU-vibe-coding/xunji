@@ -22,11 +22,15 @@ export type BizType =
   | 'CERT'
   | 'USER'
   | 'CLAIM'
+  | 'MATCH'
   | 'REPORT'
   | 'ANNOUNCEMENT';
 
+/** /files/upload 当前接受的业务类型，不等同于所有业务对象类型。 */
+export type UploadBizType = Extract<BizType, 'LOST' | 'FOUND' | 'CLAIM_PROOF' | 'CERT' | 'USER'>;
+
 export type MatchStatus = 'NEW' | 'READ' | 'CLAIMED' | 'EXPIRED';
-export type VerifyLevel = 'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3' | 'FAST_TRACK';
+export type VerifyLevel = 'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3';
 
 export type ClaimReviewStatus =
   | 'PENDING'
@@ -35,7 +39,8 @@ export type ClaimReviewStatus =
   | 'APPROVED'
   | 'REJECTED'
   | 'APPEALING'
-  | 'HANDED_OVER';
+  | 'HANDED_OVER'
+  | 'TERMINATED';
 
 export type HandoverMethod = 'MEETUP' | 'PICKUP_POINT';
 export type HandoverRole = 'OWNER' | 'FINDER';
@@ -53,7 +58,7 @@ export type NoticeType =
 
 export type NotificationPriority = 'NORMAL' | 'HIGH';
 
-export type ReportTargetType = 'LOST_ITEM' | 'FOUND_ITEM' | 'CLAIM_REQUEST' | 'USER';
+export type ReportTargetType = 'LOST_ITEM' | 'FOUND_ITEM' | 'CLAIM_REQUEST';
 export type ReportHandleStatus = 'PENDING' | 'PROCESSING' | 'CLOSED' | 'REJECTED';
 export type AnnouncementStatus = 'DRAFT' | 'PUBLISHED' | 'OFFLINE';
 
@@ -67,7 +72,7 @@ export type CreditReasonCode =
   | 'FAKE_PUBLISH_CONFIRMED'
   | 'CLAIM_TIMEOUT_NO_REPLY';
 
-export type SortBy = 'CREATED_DESC' | 'CREATED_ASC';
+export type SortBy = 'CREATED_DESC' | 'CREATED_ASC' | 'EVENT_DESC' | 'EVENT_ASC';
 export type LoginType = 'PHONE_CODE' | 'PASSWORD';
 
 /** 后端响应码（节选最常用，详见 backend/app/common/errors.py） */
@@ -89,9 +94,32 @@ export const ErrorCode = {
   ITEM_CLOSED: 42002,
   SENSITIVE_UNAUTHORIZED: 42005,
   MATCH_NOT_FOUND: 43001,
+  MATCH_CLAIMED: 43002,
   CLAIM_DUPLICATE: 44001,
   CLAIM_NOT_FOUND: 44002,
   CLAIM_INVALID_STATE: 44003,
+  APPEAL_DUPLICATE: 44007,
+  REPORT_DUPLICATE: 47002,
+  REVIEW_STATE_CHANGED: 48001,
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+const CONFLICT_ERROR_CODES = new Set<number>([
+  ErrorCode.INVALID_STATE,
+  ErrorCode.DUPLICATE_SUBMIT,
+  ErrorCode.CERT_PENDING,
+  ErrorCode.ITEM_CLOSED,
+  ErrorCode.MATCH_CLAIMED,
+  ErrorCode.CLAIM_DUPLICATE,
+  ErrorCode.CLAIM_INVALID_STATE,
+  ErrorCode.APPEAL_DUPLICATE,
+  ErrorCode.REPORT_DUPLICATE,
+  ErrorCode.REVIEW_STATE_CHANGED,
+]);
+
+/** 识别需要放弃旧操作并刷新服务端状态的并发/状态机冲突。 */
+export function isConflictApiError(error: unknown): error is { code: number; message?: string } {
+  if (!error || typeof error !== 'object' || !('code' in error)) return false;
+  return CONFLICT_ERROR_CODES.has((error as { code: number }).code);
+}

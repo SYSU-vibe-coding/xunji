@@ -27,3 +27,13 @@ export interface UnreadCountResponse {
 export interface ReadAllRequest {
   noticeType?: NoticeType;
 }
+
+export interface AnnouncementSummary {
+  id: string;
+  title: string;
+  publishedAt: string;
+}
+
+export interface AnnouncementDetail extends AnnouncementSummary {
+  content: string;
+}

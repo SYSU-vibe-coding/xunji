@@ -8,6 +8,7 @@ import {
   Document,
   HomeFilled,
   Plus,
+  Reading,
   Search,
   User,
 } from '@element-plus/icons-vue';
@@ -28,6 +29,7 @@ const navItems = [
   { key: 'publish-found', label: '发布招领', icon: Document, route: '/publish/found' },
   { key: 'matches', label: '匹配', icon: Aim, route: '/matches' },
   { key: 'my-claims', label: '我的认领', icon: ChatLineRound, route: '/claims' },
+  { key: 'announcements', label: '公告', icon: Reading, route: '/announcements' },
   { key: 'notifications', label: '消息', icon: Bell, route: '/notifications' },
   { key: 'profile', label: '我的', icon: User, route: '/profile' },
 ];

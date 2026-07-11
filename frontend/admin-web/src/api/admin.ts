@@ -1,12 +1,18 @@
 import type {
   AdminUserQuery,
   AdminUserRecord,
+  AdminClaimDetail,
+  AdminClaimQuery,
+  AdminClaimRecord,
   AnnouncementCreateRequest,
   AnnouncementCreateResponse,
+  AnnouncementQuery,
+  AnnouncementRecord,
   CertificationQuery,
   CertificationReview,
   DashboardStats,
   ItemReviewQuery,
+  ItemReviewDetail,
   ItemReviewRecord,
   MatchIntervalRequest,
   MatchIntervalResponse,
@@ -58,6 +64,10 @@ export function listItemReviews(query: ItemReviewQuery = {}) {
   );
 }
 
+export function getItemReviewDetail(bizType: ItemBizType, id: string) {
+  return http.get<ItemReviewDetail>(`/admin/items/${toItemBizTypePath(bizType)}/${id}`);
+}
+
 export function reviewItem(bizType: ItemBizType, id: string, payload: ReviewRequest) {
   return http.post<{ id: string; status: string; reviewStatus: string }>(
     `/admin/items/${toItemBizTypePath(bizType)}/${id}/review`,
@@ -74,9 +84,37 @@ export function handleReport(id: string, payload: ReportHandleRequest) {
   return http.post<{ id: string; handleStatus: string }>(`/admin/reports/${id}/handle`, payload);
 }
 
+// 认领申诉
+export function listAdminClaims(query: AdminClaimQuery = {}) {
+  return http.get<PageData<AdminClaimRecord>>('/admin/claims', query as Record<string, unknown>);
+}
+
+export function getAdminClaimDetail(id: string) {
+  return http.get<AdminClaimDetail>(`/admin/claims/${id}`);
+}
+
+export function reviewClaimAppeal(id: string, payload: ReviewRequest) {
+  return http.post<{ id: string; reviewStatus: string }>(`/claims/${id}/review`, payload);
+}
+
 // 公告
 export function createAnnouncement(payload: AnnouncementCreateRequest) {
   return http.post<AnnouncementCreateResponse>('/admin/announcements', payload);
+}
+
+export function listAnnouncements(query: AnnouncementQuery = {}) {
+  return http.get<PageData<AnnouncementRecord>>(
+    '/admin/announcements',
+    query as Record<string, unknown>,
+  );
+}
+
+export function publishAnnouncement(id: string) {
+  return http.post<AnnouncementCreateResponse>(`/admin/announcements/${id}/publish`);
+}
+
+export function offlineAnnouncement(id: string) {
+  return http.post<AnnouncementCreateResponse>(`/admin/announcements/${id}/offline`);
 }
 
 // 用户管理

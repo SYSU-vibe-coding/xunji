@@ -40,6 +40,7 @@ export interface LostItemSummary {
   lostLocation: string;
   status: LostItemStatus;
   reviewStatus: ReviewStatus;
+  reviewComment: string | null;
   coverImageUrl: string | null;
   createdAt: string;
 }
@@ -47,6 +48,8 @@ export interface LostItemSummary {
 export interface LostItemDetail extends LostItemSummary {
   subscribeMatch: boolean;
   imageUrls: string[];
+  /** 仅发布者编辑时返回，提交更新必须使用该稳定引用 */
+  imageRefs?: string[] | null;
   /** 仅发布者可见 */
   matchCount: number | null;
   updatedAt: string;
@@ -59,6 +62,8 @@ export interface LostItemQuery {
   status?: LostItemStatus;
   keyword?: string;
   location?: string;
+  eventTimeStart?: string;
+  eventTimeEnd?: string;
   sortBy?: SortBy;
   /** 默认 false：list 接口隐藏 FOUND/CLOSED；显式传 true 才返回历史 */
   includeClosed?: boolean;
@@ -116,6 +121,7 @@ export interface FoundItemSummary {
   contactPreference: ContactPreference;
   status: FoundItemStatus;
   reviewStatus: ReviewStatus;
+  reviewComment: string | null;
   coverImageUrl: string | null;
   createdAt: string;
 }
@@ -127,6 +133,8 @@ export interface VerifyQuestionOutput {
 
 export interface FoundItemDetail extends Omit<FoundItemSummary, 'coverImageUrl'> {
   imageUrls: string[];
+  /** 仅发布者编辑时返回，提交更新必须使用该稳定引用 */
+  imageRefs?: string[] | null;
   verifyQuestions: VerifyQuestionOutput[];
   hasActiveClaim: boolean;
   updatedAt: string;
@@ -139,6 +147,8 @@ export interface FoundItemQuery {
   status?: FoundItemStatus;
   keyword?: string;
   location?: string;
+  eventTimeStart?: string;
+  eventTimeEnd?: string;
   isSensitive?: boolean;
   custodyType?: CustodyType;
   sortBy?: SortBy;
@@ -147,6 +157,7 @@ export interface FoundItemQuery {
 }
 
 export type UpdateFoundItemRequest = Omit<CreateFoundItemRequest, 'verifyQuestions'> & {
+  /** 省略时保留现有问题；传数组（包括空数组）时整体替换。 */
   verifyQuestions?: VerifyQuestionInput[];
 };
 
@@ -157,7 +168,8 @@ export interface ChangeItemStatusRequest {
 }
 
 export interface FileUploadResponse {
-  url: string;
+  assetRef: string;
+  previewUrl: string;
   contentType: string;
   size: number;
   uploadedAt: string;

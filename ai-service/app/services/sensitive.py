@@ -22,7 +22,11 @@ async def detect_sensitive(
     if client is None or not client.enabled:
         return _baseline.detect_sensitive(req)
 
-    reply = await client.vl_understand(req.image_url, SENSITIVE_PROMPT)
+    try:
+        reply = await client.vl_understand(req.image_url, SENSITIVE_PROMPT)
+    except Exception:
+        logger.exception("[ai:50002] sensitive VL failed unexpectedly")
+        return _baseline.detect_sensitive(req)
     if not reply:
         return _baseline.detect_sensitive(req)
 
@@ -39,12 +43,18 @@ async def detect_sensitive(
             sensitive_type=None,
             masked_image_url=None,
             recognized_fields=None,
+            degraded=False,
+            needs_review=False,
         )
     return DetectSensitiveResponse(
         is_sensitive=True,
         sensitive_type=category,
-        masked_image_url=f"{req.image_url}?masked=1",
+        # Detection does not create an actual redacted object yet. Never
+        # present the source URL plus a query flag as a masked copy.
+        masked_image_url=None,
         recognized_fields=None,
+        degraded=True,
+        needs_review=True,
     )
 
 

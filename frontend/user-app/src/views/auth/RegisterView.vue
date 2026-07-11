@@ -37,6 +37,7 @@ const countdown = ref(0);
 const submitting = ref(false);
 
 async function sendCode() {
+  if (sendingCode.value || countdown.value > 0) return;
   if (!/^1\d{10}$/.test(form.phone)) {
     ElMessage.warning('请先输入正确的手机号');
     return;
@@ -59,29 +60,35 @@ async function sendCode() {
 }
 
 async function submit() {
-  if (!formRef.value) {
-    ElMessage.warning('页面尚未就绪，请稍后再试');
-    return;
-  }
-  let valid = false;
-  try {
-    valid = await formRef.value.validate();
-  } catch {
-    valid = false;
-  }
-  if (!valid) {
-    ElMessage.warning('请完整填写注册信息');
-    return;
-  }
+  if (submitting.value) return;
   submitting.value = true;
   try {
+    if (!formRef.value) {
+      ElMessage.warning('页面尚未就绪，请稍后再试');
+      return;
+    }
+    let valid = false;
+    try {
+      valid = await formRef.value.validate();
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      ElMessage.warning('请完整填写注册信息');
+      return;
+    }
     const data = await register(form);
     auth.setSession(data);
-    await auth.loadProfile();
+    try {
+      await auth.loadProfile();
+    } catch {
+      auth.clear();
+      throw new Error('账户信息加载失败，注册登录状态已回滚，请重试');
+    }
     ElMessage.success('注册成功');
     void router.push('/');
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '注册失败');
+    ElMessage.error(err instanceof ApiError || err instanceof Error ? err.message : '注册失败');
   } finally {
     submitting.value = false;
   }

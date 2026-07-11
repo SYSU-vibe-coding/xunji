@@ -20,6 +20,7 @@ class CreditLogRepository:
         biz_type: str,
         biz_id: str,
         reason_code: str,
+        for_update: bool = False,
     ) -> bool:
         stmt = select(CreditLog).where(
             CreditLog.user_id == user_id,
@@ -27,6 +28,8 @@ class CreditLogRepository:
             CreditLog.biz_id == biz_id,
             CreditLog.reason_code == reason_code,
         )
+        if for_update:
+            stmt = stmt.with_for_update()
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
 

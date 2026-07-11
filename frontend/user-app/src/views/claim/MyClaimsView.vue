@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router';
 import EmptyState from '@/components/EmptyState.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { listMyClaims } from '@/api/claim';
-import { isAuthApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import type {
   ClaimMyRole,
   ClaimSummary,
@@ -20,9 +20,11 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 10;
 const loading = ref(true);
+const loadError = ref('');
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     const data = await listMyClaims({ role: role.value, pageNo: page.value, pageSize });
     list.value = data.list;
@@ -31,6 +33,7 @@ async function load() {
     if (isAuthApiError(err)) return;
     list.value = [];
     total.value = 0;
+    loadError.value = err instanceof ApiError ? err.message : '认领记录加载失败，请稍后重试';
   } finally {
     loading.value = false;
   }
@@ -60,7 +63,14 @@ onMounted(load);
     <el-skeleton v-if="loading" :rows="3" animated />
 
     <template v-else>
-      <div v-if="list.length" class="grid">
+      <EmptyState
+        v-if="loadError"
+        title="认领记录加载失败"
+        :description="loadError"
+        action-text="重试"
+        @action="load"
+      />
+      <div v-else-if="list.length" class="grid">
         <el-card
           v-for="c in list"
           :key="c.id"

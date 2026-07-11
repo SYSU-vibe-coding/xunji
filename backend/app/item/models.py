@@ -20,6 +20,7 @@ class LostItem(Base):
     subscribe_match: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="SEARCHING")
     review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="APPROVED")
+    review_comment: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ai_tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
@@ -44,6 +45,7 @@ class FoundItem(Base):
     contact_preference: Mapped[str] = mapped_column(String(30), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
     review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="APPROVED")
+    review_comment: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ai_tags: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()

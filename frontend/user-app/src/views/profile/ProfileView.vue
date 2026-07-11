@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Box, Edit, Medal, Promotion, SwitchButton, Trophy } from '@element-plus/icons-vue';
 
 import StatusTag from '@/components/StatusTag.vue';
+import ImageUploader from '@/components/ImageUploader.vue';
 import { cancelMyAccount, updateMyProfile } from '@/api/user';
 import { ApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
@@ -14,17 +15,26 @@ const router = useRouter();
 const auth = useAuthStore();
 
 const editing = ref(false);
-const editForm = reactive({ nickname: '', avatarUrl: '' });
+const editForm = reactive({ nickname: '', avatarRefs: [] as string[], previewUrls: [] as string[] });
 const saving = ref(false);
+const avatarUploading = ref(false);
+const avatarUploadError = ref<string | null>(null);
 
 function openEdit() {
   if (!auth.profile) return;
   editForm.nickname = auth.profile.nickname;
-  editForm.avatarUrl = auth.profile.avatarUrl ?? '';
+  editForm.avatarRefs = auth.profile.avatarRef ? [auth.profile.avatarRef] : [];
+  editForm.previewUrls = auth.profile.avatarUrl ? [auth.profile.avatarUrl] : [];
+  avatarUploading.value = false;
+  avatarUploadError.value = null;
   editing.value = true;
 }
 
 async function saveEdit() {
+  if (avatarUploading.value || avatarUploadError.value) {
+    ElMessage.warning(avatarUploading.value ? '头像仍在上传，请稍候' : '头像上传失败，请重试');
+    return;
+  }
   if (!editForm.nickname.trim()) {
     ElMessage.warning('昵称不能为空');
     return;
@@ -33,7 +43,7 @@ async function saveEdit() {
   try {
     await updateMyProfile({
       nickname: editForm.nickname.trim(),
-      avatarUrl: editForm.avatarUrl || undefined,
+      avatarRef: editForm.avatarRefs[0],
     });
     await auth.loadProfile();
     ElMessage.success('资料已更新');
@@ -121,7 +131,7 @@ onMounted(async () => {
 
     <el-card shadow="never" class="danger-zone">
       <strong>账号注销</strong>
-      <p>注销后账号将无法登录，相关数据将进入归档状态</p>
+      <p>注销后账号将无法登录，所有活动失物与招领会关闭，关联匹配和待执行任务会失效</p>
       <el-button type="danger" plain @click="handleCancel">注销账号</el-button>
     </el-card>
 
@@ -130,13 +140,27 @@ onMounted(async () => {
         <el-form-item label="昵称">
           <el-input v-model="editForm.nickname" maxlength="20" />
         </el-form-item>
-        <el-form-item label="头像 URL（可选）">
-          <el-input v-model="editForm.avatarUrl" placeholder="支持图片直链" />
+        <el-form-item label="头像（可选）">
+          <ImageUploader
+            v-model="editForm.avatarRefs"
+            :preview-urls="editForm.previewUrls"
+            biz-type="USER"
+            :max="1"
+            @uploading-change="avatarUploading = $event"
+            @error-change="avatarUploadError = $event"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editing = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
+        <el-button
+          type="primary"
+          :loading="saving"
+          :disabled="avatarUploading || Boolean(avatarUploadError)"
+          @click="saveEdit"
+        >
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>

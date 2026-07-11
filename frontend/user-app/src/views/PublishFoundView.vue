@@ -17,6 +17,10 @@ import {
   type ItemCategory,
 } from '@xunji/shared';
 import { toBackendDateTime } from '@/utils/format';
+import {
+  parseVerifyQuestionDrafts,
+  type VerifyQuestionFieldErrors,
+} from '@/utils/interaction';
 
 interface QuestionRow {
   questionText: string;
@@ -52,6 +56,9 @@ const rules: FormRules = {
 };
 
 const submitting = ref(false);
+const imageUploading = ref(false);
+const imageUploadError = ref<string | null>(null);
+const questionErrors = ref<Record<number, VerifyQuestionFieldErrors>>({});
 
 function addQuestion() {
   if (form.questions.length >= 3) {
@@ -59,25 +66,32 @@ function addQuestion() {
     return;
   }
   form.questions.push({ questionText: '', answerKeywords: '' });
+  questionErrors.value = {};
 }
 
 function removeQuestion(idx: number) {
   form.questions.splice(idx, 1);
+  questionErrors.value = {};
 }
 
 async function submit() {
+  if (submitting.value) return;
+  if (imageUploading.value) {
+    ElMessage.warning('图片仍在上传，请稍候');
+    return;
+  }
+  if (imageUploadError.value) {
+    ElMessage.warning('有图片上传失败，请移除后重试');
+    return;
+  }
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
-  // 清理空问题
-  const verifyQuestions = form.questions
-    .filter((q) => q.questionText.trim() && q.answerKeywords.trim())
-    .map((q) => ({
-      questionText: q.questionText.trim(),
-      answerKeywords: q.answerKeywords
-        .split(',')
-        .map((k) => k.trim())
-        .filter(Boolean),
-    }));
+  const parsedQuestions = parseVerifyQuestionDrafts(form.questions);
+  questionErrors.value = parsedQuestions.errors;
+  if (!parsedQuestions.questions) {
+    ElMessage.warning('请修正验证问题中的字段错误');
+    return;
+  }
 
   submitting.value = true;
   try {
@@ -90,7 +104,7 @@ async function submit() {
       custodyType: form.custodyType,
       contactPreference: form.contactPreference,
       imageUrls: form.imageUrls,
-      verifyQuestions,
+      verifyQuestions: parsedQuestions.questions,
     });
     ElMessage.success(result.isSensitive ? '招领发布成功（敏感物品已脱敏）' : '招领发布成功');
     void router.push(`/items/found/${result.id}`);
@@ -176,24 +190,38 @@ async function submit() {
             />
           </el-form-item>
           <el-form-item label="物品图片（最多 5 张）" class="span-2">
-            <ImageUploader v-model="form.imageUrls" biz-type="FOUND" :max="5" />
+            <ImageUploader
+              v-model="form.imageUrls"
+              biz-type="FOUND"
+              :max="5"
+              @uploading-change="imageUploading = $event"
+              @error-change="imageUploadError = $event"
+            />
           </el-form-item>
         </div>
 
         <el-divider>验证问题（最多 3 个）</el-divider>
 
         <div v-for="(q, idx) in form.questions" :key="idx" class="question-row">
-          <el-input
-            v-model="q.questionText"
-            placeholder="如：请说出物品上的特殊标记"
-            maxlength="100"
-            class="q-text"
-          />
-          <el-input
-            v-model="q.answerKeywords"
-            placeholder="答案关键词，多个用英文逗号分隔"
-            class="q-ans"
-          />
+          <div class="question-field q-text">
+            <el-input
+              v-model="q.questionText"
+              placeholder="如：请说出物品上的特殊标记"
+              maxlength="100"
+            />
+            <span v-if="questionErrors[idx]?.questionText" class="field-error">
+              {{ questionErrors[idx].questionText }}
+            </span>
+          </div>
+          <div class="question-field q-ans">
+            <el-input
+              v-model="q.answerKeywords"
+              placeholder="答案关键词，多个用逗号分隔"
+            />
+            <span v-if="questionErrors[idx]?.answerKeywords" class="field-error">
+              {{ questionErrors[idx].answerKeywords }}
+            </span>
+          </div>
           <el-button
             type="danger"
             link
@@ -209,7 +237,13 @@ async function submit() {
 
         <div class="footer-actions">
           <el-button @click="router.push('/')">取消</el-button>
-          <el-button type="primary" size="large" :loading="submitting" @click="submit">
+          <el-button
+            type="primary"
+            size="large"
+            :loading="submitting"
+            :disabled="imageUploading || Boolean(imageUploadError)"
+            @click="submit"
+          >
             发布招领
           </el-button>
         </div>
@@ -248,6 +282,17 @@ async function submit() {
   .q-ans {
     flex: 1;
   }
+}
+
+.question-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-error {
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 .footer-actions {

@@ -30,3 +30,13 @@ ai-service/**/*.pyc
 *.toc
 *.synctex.gz
 deploy/docker/data
+
+# Secrets. Keep only committed templates in build context.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!*.env.example
+!**/.env.example
+!**/*.env.example

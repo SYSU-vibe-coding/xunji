@@ -4,17 +4,20 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Promotion, Refresh, Setting, Timer } from '@element-plus/icons-vue';
 
 import { getMatchStatus, setMatchInterval, triggerMatchRun } from '@/api/admin';
-import { isAuthApiError } from '@/api/http';
+import { ApiError, isUnauthorizedApiError } from '@/api/http';
 import { shortDateTime } from '@/utils/format';
-import type { MatchJobStatus } from '@xunji/shared';
+import { isConflictApiError, type MatchJobStatus } from '@xunji/shared';
+import { createLatestRequestGuard } from '@/utils/admin-list';
 
 const status = ref<MatchJobStatus | null>(null);
 const loading = ref(true);
+const errorMessage = ref('');
 const intervalInput = ref(0);
 const intervalSaving = ref(false);
 const triggering = ref(false);
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
+const requestGuard = createLatestRequestGuard();
 
 const isRunning = computed(() => status.value?.status === 'running');
 const progressPercent = computed(() => {
@@ -26,9 +29,12 @@ const progressPercent = computed(() => {
 // 静默加载：只更新 status，不动 loading，避免骨架屏闪烁。
 // intervalInput 只在首次加载或用户没在编辑/保存时同步，防止打断输入。
 async function load(silent = false) {
+  const requestId = requestGuard.next();
   if (!silent) loading.value = true;
+  if (!silent) errorMessage.value = '';
   try {
     const s = await getMatchStatus();
+    if (!requestGuard.isLatest(requestId)) return;
     status.value = s;
     if (!intervalSaving.value) {
       // 只在用户没有手动改过输入框时跟随服务器；用一个标记判断
@@ -38,11 +44,11 @@ async function load(silent = false) {
       }
     }
   } catch (err) {
-    if (!isAuthApiError(err) && !silent) {
-      ElMessage.error('加载匹配状态失败');
-    }
+    if (!requestGuard.isLatest(requestId) || isUnauthorizedApiError(err) || silent) return;
+    status.value = null;
+    errorMessage.value = err instanceof ApiError ? err.message : '加载匹配状态失败';
   } finally {
-    if (!silent) loading.value = false;
+    if (!silent && requestGuard.isLatest(requestId)) loading.value = false;
   }
 }
 
@@ -50,13 +56,25 @@ const intervalTouched = ref(false);
 const lastServerInterval = ref(0);
 
 async function triggerRun() {
+  if (triggering.value || intervalSaving.value || isRunning.value) return;
   triggering.value = true;
   try {
+    await ElMessageBox.confirm(
+      '确认立即触发全量匹配？任务会对当前有效的失物和招领进行评分，并可能写入新的匹配结果。',
+      '确认触发匹配',
+      { type: 'warning', confirmButtonText: '确认触发', cancelButtonText: '取消' },
+    );
     await triggerMatchRun();
     ElMessage.success('已触发匹配任务');
     await load(true);
   } catch (err) {
-    if (!isAuthApiError(err)) {
+    if (err === 'cancel' || err === 'close') return;
+    if (isConflictApiError(err)) {
+      ElMessage.warning('匹配任务状态已变化，已刷新最新状态');
+      await load(true);
+      return;
+    }
+    if (!isUnauthorizedApiError(err)) {
       ElMessage.error('触发失败');
     }
   } finally {
@@ -65,6 +83,7 @@ async function triggerRun() {
 }
 
 async function saveInterval() {
+  if (intervalSaving.value || triggering.value) return;
   if (intervalInput.value < 0 || intervalInput.value > 1440) {
     ElMessage.warning('间隔范围 0-1440 分钟（0 表示关闭自动）');
     return;
@@ -87,7 +106,12 @@ async function saveInterval() {
     lastServerInterval.value = intervalInput.value;
     await load(true);
   } catch (err) {
-    if (!isAuthApiError(err)) {
+    if (isConflictApiError(err)) {
+      ElMessage.warning('匹配设置状态已变化，已刷新最新状态');
+      await load(true);
+      return;
+    }
+    if (!isUnauthorizedApiError(err)) {
       ElMessage.error('保存失败');
     }
   } finally {
@@ -128,7 +152,7 @@ onMounted(() => {
   timer = setInterval(() => {
     now.value = Date.now();
     // 静默轮询：不动 loading，不打断用户编辑
-    load(true);
+    if (!loading.value) load(true);
   }, 2000);
 });
 
@@ -146,6 +170,9 @@ onUnmounted(() => {
     </el-page-header>
 
     <el-skeleton v-if="loading" :rows="4" animated />
+    <el-result v-else-if="errorMessage" icon="error" title="匹配状态加载失败" :sub-title="errorMessage">
+      <template #extra><el-button type="primary" @click="load()">重试</el-button></template>
+    </el-result>
 
     <template v-else>
       <!-- 当前状态 -->
@@ -161,7 +188,7 @@ onUnmounted(() => {
                 type="primary"
                 :icon="Refresh"
                 :loading="triggering"
-                :disabled="isRunning"
+                :disabled="isRunning || intervalSaving || triggering"
                 @click="triggerRun"
               >
                 {{ isRunning ? '正在运行…' : '手动触发匹配' }}
@@ -227,12 +254,13 @@ onUnmounted(() => {
             :min="0"
             :max="1440"
             :step="5"
+            :disabled="intervalSaving || triggering"
             controls-position="right"
             style="width: 140px"
             @update:model-value="onIntervalInput"
           />
           <span>分钟自动运行一次（填 0 关闭自动，仅手动触发）</span>
-          <el-button type="primary" :loading="intervalSaving" @click="saveInterval">
+          <el-button type="primary" :loading="intervalSaving" :disabled="intervalSaving || triggering" @click="saveInterval">
             保存
           </el-button>
         </div>

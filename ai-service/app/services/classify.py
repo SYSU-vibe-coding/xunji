@@ -22,7 +22,11 @@ async def classify_item(
     if client is None or not client.enabled or not req.image_urls:
         return _baseline.classify_item(req)
 
-    reply = await client.vl_understand(req.image_urls[0], CLASSIFY_PROMPT)
+    try:
+        reply = await client.vl_understand(req.image_urls[0], CLASSIFY_PROMPT)
+    except Exception:
+        logger.exception("[ai:50002] classify VL failed unexpectedly")
+        return _baseline.classify_item(req)
     if not reply:
         return _baseline.classify_item(req)
 
@@ -37,6 +41,8 @@ async def classify_item(
         category=category,
         tags=baseline.tags,
         confidence=85.0,
+        degraded=False,
+        source="VISION_MODEL",
     )
 
 

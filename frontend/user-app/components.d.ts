@@ -56,4 +56,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     StatusTag: typeof import('./src/components/StatusTag.vue')['default']
   }
+  export interface ComponentCustomProperties {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
+  }
 }

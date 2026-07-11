@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   ElMessage,
   ElMessageBox,
@@ -39,37 +39,99 @@ import {
   type ItemCategory,
   type LostItemDetail,
   type LostItemSummary,
+  isConflictApiError,
 } from '@xunji/shared';
 import { shortDateTime, toBackendDateTime } from '@/utils/format';
+import {
+  buildMyItemsQuery,
+  parseMyItemsQuery,
+  parseVerifyQuestionDrafts,
+  type MyItemsTab,
+  type VerifyQuestionDraft,
+  type VerifyQuestionFieldErrors,
+} from '@/utils/interaction';
 
+const route = useRoute();
 const router = useRouter();
+const initialQuery = parseMyItemsQuery(route.query);
+const pageSize = 12;
 
-const tab = ref<'lost' | 'found'>('lost');
+const tab = ref<MyItemsTab>(initialQuery.tab);
 const lostList = ref<LostItemSummary[]>([]);
 const foundList = ref<FoundItemSummary[]>([]);
-const loading = ref(true);
+const lostPage = ref(initialQuery.tab === 'lost' ? initialQuery.page : 1);
+const foundPage = ref(initialQuery.tab === 'found' ? initialQuery.page : 1);
+const lostTotal = ref(0);
+const foundTotal = ref(0);
+const listLoading = reactive({ lost: false, found: false });
+const listError = reactive({ lost: '', found: '' });
 const visibleList = computed(() => (tab.value === 'lost' ? lostList.value : foundList.value));
+const visiblePage = computed(() => (tab.value === 'lost' ? lostPage.value : foundPage.value));
+const visibleTotal = computed(() => (tab.value === 'lost' ? lostTotal.value : foundTotal.value));
+const visibleLoading = computed(() => listLoading[tab.value]);
+const visibleError = computed(() => listError[tab.value]);
 
-async function load() {
-  loading.value = true;
+async function syncUrl(targetId = '', replace = false) {
+  const target = {
+    name: 'my-items',
+    query: buildMyItemsQuery(tab.value, visiblePage.value, targetId),
+  };
+  if (router.resolve(target).fullPath === route.fullPath) return;
+  await (replace ? router.replace(target) : router.push(target));
+}
+
+async function loadKind(kind: MyItemsTab) {
+  listLoading[kind] = true;
+  listError[kind] = '';
   try {
-    const [lostPage, foundPage] = await Promise.all([
-      listMyLostItems({ pageSize: 50, includeClosed: true }),
-      listMyFoundItems({ pageSize: 50, includeClosed: true }),
-    ]);
-    lostList.value = lostPage.list;
-    foundList.value = foundPage.list;
+    if (kind === 'lost') {
+      const data = await listMyLostItems({
+        pageNo: lostPage.value,
+        pageSize,
+        includeClosed: true,
+      });
+      lostList.value = data.list;
+      lostTotal.value = data.total;
+      const finalPage = Math.max(1, Math.ceil(data.total / pageSize));
+      if (lostPage.value > finalPage) {
+        lostPage.value = finalPage;
+        if (tab.value === kind) await syncUrl('', true);
+        await loadKind(kind);
+      }
+    } else {
+      const data = await listMyFoundItems({
+        pageNo: foundPage.value,
+        pageSize,
+        includeClosed: true,
+      });
+      foundList.value = data.list;
+      foundTotal.value = data.total;
+      const finalPage = Math.max(1, Math.ceil(data.total / pageSize));
+      if (foundPage.value > finalPage) {
+        foundPage.value = finalPage;
+        if (tab.value === kind) await syncUrl('', true);
+        await loadKind(kind);
+      }
+    }
   } catch (err) {
     if (isAuthApiError(err)) return;
-    lostList.value = [];
-    foundList.value = [];
-    ElMessage.error(err instanceof ApiError ? err.message : '加载我的发布失败');
+    listError[kind] = err instanceof ApiError ? err.message : '加载我的发布失败';
   } finally {
-    loading.value = false;
+    listLoading[kind] = false;
   }
 }
 
-onMounted(load);
+async function changeTab() {
+  await syncUrl();
+  if (!listLoading[tab.value]) await loadKind(tab.value);
+}
+
+async function changePage(page: number) {
+  if (tab.value === 'lost') lostPage.value = page;
+  else foundPage.value = page;
+  await syncUrl();
+  await loadKind(tab.value);
+}
 
 const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024);
 function onResize() {
@@ -87,11 +149,27 @@ const lostDetail = ref<LostItemDetail | null>(null);
 const foundDetail = ref<FoundItemDetail | null>(null);
 const editing = ref(false);
 const saving = ref(false);
+const imageUploading = ref(false);
+const imageUploadError = ref<string | null>(null);
 const changingStatus = ref(false);
 const formRef = ref<FormInstance>();
+const foundQuestionMode = ref<'KEEP' | 'REPLACE'>('KEEP');
+const foundQuestions = ref<VerifyQuestionDraft[]>([{ questionText: '', answerKeywords: '' }]);
+const questionErrors = ref<Record<number, VerifyQuestionFieldErrors>>({});
 const canCloseFound = computed(
   () => foundDetail.value?.status === 'PENDING' || foundDetail.value?.status === 'CLAIMING',
 );
+const hasLegacyLostImages = computed(() => Boolean(
+  lostDetail.value?.imageUrls.length && !lostDetail.value.imageRefs?.length,
+));
+const hasLegacyFoundImages = computed(() => Boolean(
+  foundDetail.value?.imageUrls.length && !foundDetail.value.imageRefs?.length,
+));
+const needsLegacyImageReplacement = computed(() => (
+  dialogKind.value === 'lost'
+    ? hasLegacyLostImages.value && !lostForm.imageUrls.length
+    : hasLegacyFoundImages.value && !foundForm.imageUrls.length
+));
 
 const lostForm = reactive({
   itemName: '',
@@ -158,7 +236,7 @@ function resetLostForm(detail: LostItemDetail) {
   lostForm.lostLocation = detail.lostLocation;
   lostForm.description = detail.description ?? '';
   lostForm.subscribeMatch = detail.subscribeMatch;
-  lostForm.imageUrls = [...detail.imageUrls];
+  lostForm.imageUrls = [...(detail.imageRefs ?? [])];
 }
 
 function resetFoundForm(detail: FoundItemDetail) {
@@ -169,16 +247,22 @@ function resetFoundForm(detail: FoundItemDetail) {
   foundForm.custodyType = detail.custodyType;
   foundForm.contactPreference = detail.contactPreference;
   foundForm.description = detail.description ?? '';
-  foundForm.imageUrls = [...detail.imageUrls];
+  foundForm.imageUrls = [...(detail.imageRefs ?? [])];
+  foundQuestionMode.value = 'KEEP';
+  foundQuestions.value = [{ questionText: '', answerKeywords: '' }];
+  questionErrors.value = {};
 }
 
-async function openCard(id: string, kind: 'lost' | 'found') {
+async function openCard(id: string, kind: MyItemsTab) {
+  if (dialogLoading.value && dialogKind.value === kind) return;
   dialogKind.value = kind;
   dialogVisible.value = true;
   dialogLoading.value = true;
   editing.value = false;
   lostDetail.value = null;
   foundDetail.value = null;
+  imageUploading.value = false;
+  imageUploadError.value = null;
   try {
     if (kind === 'lost') {
       const detail = await getLostItem(id);
@@ -197,10 +281,27 @@ async function openCard(id: string, kind: 'lost' | 'found') {
   }
 }
 
+async function openFromCard(id: string, kind: MyItemsTab) {
+  tab.value = kind;
+  const target = { name: 'my-items', query: buildMyItemsQuery(kind, visiblePage.value, id) };
+  if (router.resolve(target).fullPath === route.fullPath) await openCard(id, kind);
+  else await router.push(target);
+}
+
+function closeDetailRoute() {
+  const target = parseMyItemsQuery(route.query);
+  if (target.targetId) void syncUrl('', true);
+}
+
 function startEdit() {
   if (dialogKind.value === 'lost' && lostDetail.value) resetLostForm(lostDetail.value);
   if (dialogKind.value === 'found' && foundDetail.value) resetFoundForm(foundDetail.value);
+  imageUploading.value = false;
+  imageUploadError.value = null;
   editing.value = true;
+  if (needsLegacyImageReplacement.value) {
+    ElMessage.warning('旧记录缺少可提交的图片引用；保存前请重新上传图片，避免覆盖清空');
+  }
 }
 
 function cancelEdit() {
@@ -210,6 +311,19 @@ function cancelEdit() {
 }
 
 async function saveEdit() {
+  if (saving.value) return;
+  if (imageUploading.value) {
+    ElMessage.warning('图片仍在上传，请稍候');
+    return;
+  }
+  if (imageUploadError.value) {
+    ElMessage.warning('有图片上传失败，请移除后重试');
+    return;
+  }
+  if (needsLegacyImageReplacement.value) {
+    ElMessage.warning('旧图片不能安全沿用，请重新上传后再保存');
+    return;
+  }
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
   saving.value = true;
@@ -231,6 +345,16 @@ async function saveEdit() {
       resetLostForm(updated);
     }
     if (dialogKind.value === 'found' && foundDetail.value) {
+      let verifyQuestions;
+      if (foundQuestionMode.value === 'REPLACE') {
+        const parsed = parseVerifyQuestionDrafts(foundQuestions.value);
+        questionErrors.value = parsed.errors;
+        if (!parsed.questions) {
+          ElMessage.warning('请修正验证问题中的字段错误');
+          return;
+        }
+        verifyQuestions = parsed.questions;
+      }
       const id = foundDetail.value.id;
       await updateFoundItem(id, {
         itemName: foundForm.itemName,
@@ -241,6 +365,7 @@ async function saveEdit() {
         custodyType: foundForm.custodyType,
         contactPreference: foundForm.contactPreference,
         imageUrls: foundForm.imageUrls,
+        ...(verifyQuestions !== undefined ? { verifyQuestions } : {}),
       });
       const updated = await getFoundItem(id);
       foundDetail.value = updated;
@@ -248,8 +373,17 @@ async function saveEdit() {
     }
     editing.value = false;
     ElMessage.success('已保存');
-    await load();
+    await loadKind(dialogKind.value);
   } catch (err) {
+    if (isConflictApiError(err)) {
+      editing.value = false;
+      ElMessage.warning('物品状态已变化，已退出旧操作并刷新最新数据');
+      await Promise.all([openCard(
+        dialogKind.value === 'lost' ? lostDetail.value!.id : foundDetail.value!.id,
+        dialogKind.value,
+      ), loadKind(dialogKind.value)]);
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '保存失败');
   } finally {
     saving.value = false;
@@ -278,8 +412,13 @@ async function updateStatus(status: 'FOUND' | 'CLOSED') {
       resetFoundForm(foundDetail.value);
     }
     ElMessage.success('状态已更新');
-    await load();
+    await loadKind(dialogKind.value);
   } catch (err) {
+    if (isConflictApiError(err)) {
+      ElMessage.warning('物品状态已变化，已关闭旧操作并刷新最新数据');
+      await Promise.all([openCard(id, dialogKind.value), loadKind(dialogKind.value)]);
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '状态更新失败');
   } finally {
     changingStatus.value = false;
@@ -299,6 +438,49 @@ const detailImages = computed(() => {
   if (dialogKind.value === 'lost') return lostDetail.value?.imageUrls ?? [];
   return foundDetail.value?.imageUrls ?? [];
 });
+
+function addFoundQuestion() {
+  if (foundQuestions.value.length < 3) {
+    foundQuestions.value.push({ questionText: '', answerKeywords: '' });
+  }
+}
+
+function removeFoundQuestion(index: number) {
+  foundQuestions.value.splice(index, 1);
+  if (!foundQuestions.value.length) {
+    foundQuestions.value.push({ questionText: '', answerKeywords: '' });
+  }
+  questionErrors.value = {};
+}
+
+watch(
+  () => route.fullPath,
+  () => {
+    const state = parseMyItemsQuery(route.query);
+    const pageChanged = state.tab === 'lost'
+      ? lostPage.value !== state.page
+      : foundPage.value !== state.page;
+    tab.value = state.tab;
+    if (state.tab === 'lost') lostPage.value = state.page;
+    else foundPage.value = state.page;
+    if (pageChanged) void loadKind(state.tab);
+    if (state.targetId) void openCard(state.targetId, state.tab);
+  },
+);
+
+onMounted(async () => {
+  const canonical = {
+    name: 'my-items',
+    query: buildMyItemsQuery(initialQuery.tab, initialQuery.page, initialQuery.targetId),
+  };
+  if (router.resolve(canonical).fullPath !== route.fullPath) {
+    await router.replace(canonical);
+  }
+  await Promise.all([loadKind('lost'), loadKind('found')]);
+  if (initialQuery.targetId && !dialogVisible.value) {
+    await openCard(initialQuery.targetId, initialQuery.tab);
+  }
+});
 </script>
 
 <template>
@@ -310,27 +492,53 @@ const detailImages = computed(() => {
       back-fallback="/profile"
     />
 
-    <el-radio-group v-model="tab" size="large">
-      <el-radio-button label="lost">失物 ({{ lostList.length }})</el-radio-button>
-      <el-radio-button label="found">招领 ({{ foundList.length }})</el-radio-button>
+    <el-radio-group v-model="tab" size="large" @change="changeTab">
+      <el-radio-button label="lost">失物 ({{ lostTotal }})</el-radio-button>
+      <el-radio-button label="found">招领 ({{ foundTotal }})</el-radio-button>
     </el-radio-group>
 
-    <el-skeleton v-if="loading" :rows="4" animated />
+    <el-skeleton v-if="visibleLoading && !visibleList.length" :rows="4" animated />
     <template v-else>
-      <div v-if="visibleList.length" class="grid">
+      <EmptyState
+        v-if="visibleError && !visibleList.length"
+        title="我的发布加载失败"
+        :description="visibleError"
+        action-text="重试"
+        @action="loadKind(tab)"
+      />
+      <el-alert
+        v-else-if="visibleError"
+        type="warning"
+        :closable="false"
+        :title="`${visibleError}，当前保留上次成功结果`"
+      >
+        <template #default><el-button link type="primary" @click="loadKind(tab)">重试</el-button></template>
+      </el-alert>
+      <div v-if="visibleList.length" v-loading="visibleLoading" class="grid">
         <ItemCard
           v-for="item in visibleList"
           :key="item.id"
           :kind="tab === 'lost' ? 'lost' : 'found'"
           :item="item"
-          @open="(id) => openCard(id, tab)"
+          show-review
+          @open="(id) => openFromCard(id, tab)"
         />
       </div>
       <EmptyState
-        v-else
+        v-else-if="!visibleError"
         :title="tab === 'lost' ? '还没有发布过失物' : '还没有发布过招领'"
         action-text="去发布"
         @action="router.push(tab === 'lost' ? '/publish/lost' : '/publish/found')"
+      />
+      <el-pagination
+        v-if="visibleTotal > pageSize"
+        :current-page="visiblePage"
+        :page-size="pageSize"
+        :total="visibleTotal"
+        layout="prev, pager, next"
+        background
+        class="pagination"
+        @current-change="changePage"
       />
     </template>
 
@@ -342,6 +550,7 @@ const detailImages = computed(() => {
       class="detail-dialog"
       :close-on-click-modal="false"
       destroy-on-close
+      @closed="closeDetailRoute"
     >
       <el-skeleton v-if="dialogLoading" :rows="6" animated />
 
@@ -350,6 +559,7 @@ const detailImages = computed(() => {
           <div class="badges">
             <el-tag round effect="dark">{{ categoryLabels[lostDetail.category] }}</el-tag>
             <StatusTag variant="lost" :value="lostDetail.status" />
+            <StatusTag variant="review" :value="lostDetail.reviewStatus" />
           </div>
           <h3 class="title">{{ lostDetail.itemName }}</h3>
           <p class="desc">{{ lostDetail.description || '发布者未填写描述' }}</p>
@@ -364,6 +574,10 @@ const detailImages = computed(() => {
             <el-descriptions-item label="订阅匹配">{{ lostDetail.subscribeMatch ? '已订阅' : '未订阅' }}</el-descriptions-item>
             <el-descriptions-item label="匹配数">{{ lostDetail.matchCount ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="发布时间">{{ shortDateTime(lostDetail.createdAt) }}</el-descriptions-item>
+            <el-descriptions-item label="审核状态">
+              <StatusTag variant="review" :value="lostDetail.reviewStatus" />
+            </el-descriptions-item>
+            <el-descriptions-item label="审核意见">{{ lostDetail.reviewComment || '暂无' }}</el-descriptions-item>
           </el-descriptions>
         </div>
 
@@ -394,7 +608,21 @@ const detailImages = computed(() => {
             <el-input v-model="lostForm.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
           </el-form-item>
           <el-form-item label="物品图片">
-            <ImageUploader v-model="lostForm.imageUrls" biz-type="LOST" :max="5" />
+            <el-alert
+              v-if="hasLegacyLostImages"
+              class="legacy-alert"
+              type="warning"
+              :closable="false"
+              title="旧记录缺少可复用图片引用，保存前必须重新上传图片；系统不会静默清空原图。"
+            />
+            <ImageUploader
+              v-model="lostForm.imageUrls"
+              :preview-urls="lostDetail.imageUrls"
+              biz-type="LOST"
+              :max="5"
+              @uploading-change="imageUploading = $event"
+              @error-change="imageUploadError = $event"
+            />
           </el-form-item>
           <el-form-item>
             <el-checkbox v-model="lostForm.subscribeMatch">订阅匹配提醒</el-checkbox>
@@ -407,6 +635,7 @@ const detailImages = computed(() => {
           <div class="badges">
             <el-tag round effect="dark">{{ categoryLabels[foundDetail.category] }}</el-tag>
             <StatusTag variant="found" :value="foundDetail.status" />
+            <StatusTag variant="review" :value="foundDetail.reviewStatus" />
           </div>
           <h3 class="title">{{ foundDetail.itemName }}</h3>
           <p class="desc">{{ foundDetail.description || '发布者未填写描述' }}</p>
@@ -420,6 +649,10 @@ const detailImages = computed(() => {
             <el-descriptions-item label="保管方式">{{ custodyTypeLabels[foundDetail.custodyType] }}</el-descriptions-item>
             <el-descriptions-item label="联系偏好">{{ contactPreferenceLabels[foundDetail.contactPreference] }}</el-descriptions-item>
             <el-descriptions-item label="发布时间">{{ shortDateTime(foundDetail.createdAt) }}</el-descriptions-item>
+            <el-descriptions-item label="审核状态">
+              <StatusTag variant="review" :value="foundDetail.reviewStatus" />
+            </el-descriptions-item>
+            <el-descriptions-item label="审核意见">{{ foundDetail.reviewComment || '暂无' }}</el-descriptions-item>
           </el-descriptions>
         </div>
 
@@ -452,8 +685,53 @@ const detailImages = computed(() => {
             <el-input v-model="foundForm.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
           </el-form-item>
           <el-form-item label="物品图片">
-            <ImageUploader v-model="foundForm.imageUrls" biz-type="FOUND" :max="5" />
+            <el-alert
+              v-if="hasLegacyFoundImages"
+              class="legacy-alert"
+              type="warning"
+              :closable="false"
+              title="旧记录缺少可复用图片引用，保存前必须重新上传图片；系统不会静默清空原图。"
+            />
+            <ImageUploader
+              v-model="foundForm.imageUrls"
+              :preview-urls="foundDetail.imageUrls"
+              biz-type="FOUND"
+              :max="5"
+              @uploading-change="imageUploading = $event"
+              @error-change="imageUploadError = $event"
+            />
           </el-form-item>
+          <el-form-item label="验证问题">
+            <el-radio-group v-model="foundQuestionMode">
+              <el-radio-button label="KEEP">保留现有问题</el-radio-button>
+              <el-radio-button label="REPLACE">替换现有问题</el-radio-button>
+            </el-radio-group>
+            <p class="form-tip">
+              {{ foundQuestionMode === 'KEEP'
+                ? `将保留当前 ${foundDetail.verifyQuestions.length} 个验证问题，不提交覆盖字段。`
+                : '新问题将整体替换现有问题；整行留空表示不设置验证问题。' }}
+            </p>
+          </el-form-item>
+          <div v-if="foundQuestionMode === 'REPLACE'" class="question-editor">
+            <div v-for="(question, index) in foundQuestions" :key="index" class="question-row">
+              <div class="question-field">
+                <el-input v-model="question.questionText" maxlength="100" placeholder="验证问题" />
+                <span v-if="questionErrors[index]?.questionText" class="field-error">
+                  {{ questionErrors[index].questionText }}
+                </span>
+              </div>
+              <div class="question-field">
+                <el-input v-model="question.answerKeywords" placeholder="答案关键词，逗号分隔" />
+                <span v-if="questionErrors[index]?.answerKeywords" class="field-error">
+                  {{ questionErrors[index].answerKeywords }}
+                </span>
+              </div>
+              <el-button type="danger" link @click="removeFoundQuestion(index)">删除</el-button>
+            </div>
+            <el-button link type="primary" :disabled="foundQuestions.length >= 3" @click="addFoundQuestion">
+              新增问题
+            </el-button>
+          </div>
         </el-form>
       </template>
 
@@ -484,7 +762,12 @@ const detailImages = computed(() => {
         </template>
         <template v-else-if="editing">
           <el-button @click="cancelEdit">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
+          <el-button
+            type="primary"
+            :loading="saving"
+            :disabled="imageUploading || Boolean(imageUploadError) || needsLegacyImageReplacement"
+            @click="saveEdit"
+          >保存</el-button>
         </template>
       </template>
     </el-dialog>
@@ -502,6 +785,44 @@ const detailImages = computed(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
+}
+
+.pagination {
+  justify-content: center;
+}
+
+.legacy-alert {
+  margin-bottom: 10px;
+}
+
+.form-tip {
+  width: 100%;
+  margin: 6px 0 0;
+  color: var(--xunji-text-muted);
+  font-size: 12px;
+}
+
+.question-editor,
+.question-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.question-editor {
+  margin-bottom: 18px;
+}
+
+.question-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.field-error {
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 .detail {
@@ -539,6 +860,12 @@ const detailImages = computed(() => {
       object-fit: cover;
       border: 1px solid var(--xunji-border);
     }
+  }
+}
+
+@media (max-width: 720px) {
+  .question-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -1,8 +1,11 @@
 import asyncio
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from app.core.auth import create_access_token
+from app.core.object_storage import get_object_storage
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
@@ -31,6 +34,7 @@ async def setup_db():
     import app.claim.models
     import app.credit.models
     import app.item.models
+    import app.job.models
     import app.match.models
     import app.notification.models
     import app.operation_log.models
@@ -141,17 +145,19 @@ def staff_headers(seeded_users: None, staff_token: str) -> dict[str, str]:
 
 
 @pytest.fixture(autouse=True)
-def _disable_match_background_tasks(monkeypatch):
-    """The item create endpoints schedule trigger_match in BackgroundTasks.
-    During tests we don't want that fanning out to real MySQL — replace the
-    helpers with no-ops. Tests that exercise trigger_match itself import the
-    function directly and patch async_session_factory, so they aren't affected.
-    """
-
-    async def _noop(item_id: str) -> None:  # pragma: no cover
-        return None
-
-    import app.item.service as item_service
-
-    monkeypatch.setattr(item_service, "_trigger_match_for_lost", _noop)
-    monkeypatch.setattr(item_service, "_trigger_match_for_found", _noop)
+def mock_minio(monkeypatch):
+    """Keep all object-storage calls deterministic and off the network."""
+    storage = get_object_storage()
+    client = MagicMock()
+    client.bucket_exists.return_value = True
+    client.stat_object.return_value = SimpleNamespace(size=128)
+    client.presigned_get_object.side_effect = (
+        lambda bucket, key, **kwargs: f"http://minio:9000/{bucket}/{key}?signature=ai-test"
+    )
+    signer = MagicMock()
+    signer.presigned_get_object.side_effect = (
+        lambda bucket, key, **kwargs: f"https://signed.test/{bucket}/{key}?signature=test"
+    )
+    monkeypatch.setattr(storage, "_client", client)
+    monkeypatch.setattr(storage, "_signing_client", signer)
+    return SimpleNamespace(storage=storage, client=client, signer=signer)

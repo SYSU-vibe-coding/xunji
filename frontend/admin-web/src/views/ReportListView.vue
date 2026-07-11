@@ -1,41 +1,74 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 import StatusTag from '@/components/StatusTag.vue';
 import { handleReport, listReports } from '@/api/admin';
-import { ApiError, isAuthApiError } from '@/api/http';
+import { ApiError, isUnauthorizedApiError } from '@/api/http';
 import {
   type ReportHandleStatus,
   type ReportRecord,
   type ReportTargetType,
+  isConflictApiError,
   reportStatusLabels,
   reportTargetTypeLabels,
 } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
+import { createLatestRequestGuard, lastPage, queryEnum, queryPositiveInt } from '@/utils/admin-list';
+import {
+  buildReportHandlePayload,
+  isSupportedReportTargetType,
+  reportPenalty,
+  reportTargetRoute,
+} from '@/utils/report';
 
+const route = useRoute();
 const router = useRouter();
+const requestGuard = createLatestRequestGuard();
 
 const list = ref<ReportRecord[]>([]);
 const total = ref(0);
-const page = ref(1);
 const pageSize = 10;
-const handleStatus = ref<ReportHandleStatus | ''>('');
-const targetType = ref<ReportTargetType | ''>('');
+const page = ref(queryPositiveInt(route.query.page));
+const handleStatus = ref<ReportHandleStatus | ''>(
+  queryEnum(route.query.handleStatus, Object.keys(reportStatusLabels) as ReportHandleStatus[]),
+);
+const targetType = ref<ReportTargetType | ''>(
+  queryEnum(route.query.targetType, Object.keys(reportTargetTypeLabels) as ReportTargetType[]),
+);
 const loading = ref(true);
+const errorMessage = ref('');
 
 const dialogVisible = ref(false);
 const dialogRecord = ref<ReportRecord | null>(null);
-const dialogForm = reactive<{ action: 'VALID' | 'INVALID'; result: string; creditDelta: number }>({
+const dialogForm = reactive<{
+  action: 'VALID' | 'INVALID';
+  result: string;
+  creditDelta: number | null;
+}>({
   action: 'VALID',
   result: '',
-  creditDelta: -10,
+  creditDelta: null,
 });
 const submitting = ref(false);
 
+function currentQuery() {
+  return {
+    ...(handleStatus.value ? { handleStatus: handleStatus.value } : {}),
+    ...(targetType.value ? { targetType: targetType.value } : {}),
+    ...(page.value > 1 ? { page: String(page.value) } : {}),
+  };
+}
+
+async function syncUrl() {
+  await router.replace({ query: currentQuery() });
+}
+
 async function load() {
+  const requestId = requestGuard.next();
   loading.value = true;
+  errorMessage.value = '';
   try {
     const data = await listReports({
       pageNo: page.value,
@@ -43,66 +76,130 @@ async function load() {
       handleStatus: handleStatus.value || undefined,
       targetType: targetType.value || undefined,
     });
+    if (!requestGuard.isLatest(requestId)) return;
+    const finalPage = lastPage(data.total, pageSize);
+    if (page.value > finalPage) {
+      page.value = finalPage;
+      await syncUrl();
+      if (requestGuard.isLatest(requestId)) void load();
+      return;
+    }
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (isAuthApiError(err)) return;
+    if (!requestGuard.isLatest(requestId) || isUnauthorizedApiError(err)) return;
     list.value = [];
     total.value = 0;
+    errorMessage.value = err instanceof ApiError ? err.message : '举报列表加载失败';
   } finally {
-    loading.value = false;
+    if (requestGuard.isLatest(requestId)) loading.value = false;
   }
+}
+
+async function refresh() {
+  await syncUrl();
+  await load();
 }
 
 function search() {
   page.value = 1;
-  void load();
-}
-
-function targetRoute(record: ReportRecord) {
-  if (record.targetType === 'LOST_ITEM') return { path: '/reviews', query: { bizType: 'lost' } };
-  if (record.targetType === 'FOUND_ITEM') return { path: '/reviews', query: { bizType: 'found' } };
-  if (record.targetType === 'USER') return { path: '/users', query: { keyword: record.targetId } };
-  return null;
+  void refresh();
 }
 
 function goTarget(record: ReportRecord) {
-  const route = targetRoute(record);
-  if (route) void router.push(route);
+  const target = reportTargetRoute(record);
+  if (target) void router.push(target);
+}
+
+function resetDialogForm(action: 'VALID' | 'INVALID') {
+  if (!dialogRecord.value || action === 'INVALID') {
+    dialogForm.result = '';
+    dialogForm.creditDelta = null;
+    return;
+  }
+  const penalty = reportPenalty(dialogRecord.value.targetType);
+  dialogForm.result = penalty?.result ?? '举报有效，已记录处理结论';
+  dialogForm.creditDelta = penalty?.creditDelta ?? null;
 }
 
 function openDialog(record: ReportRecord) {
+  if (!isSupportedReportTargetType(record.targetType)) {
+    ElMessage.warning('该举报目标类型未接入完整处置流程，前端已禁止提交');
+    return;
+  }
   dialogRecord.value = record;
   dialogForm.action = 'VALID';
-  dialogForm.result = '举报有效，已扣减信用分并通知双方';
-  dialogForm.creditDelta = -10;
+  resetDialogForm('VALID');
   dialogVisible.value = true;
 }
 
 async function submit() {
-  if (!dialogRecord.value) return;
+  if (!dialogRecord.value || submitting.value) return;
   if (!dialogForm.result.trim()) {
     ElMessage.warning('请输入处理结果');
     return;
   }
   submitting.value = true;
   try {
-    await handleReport(dialogRecord.value.id, {
-      action: dialogForm.action,
-      result: dialogForm.result.trim(),
-      ...(dialogForm.action === 'VALID'
-        ? { creditDelta: dialogForm.creditDelta, reasonCode: 'FRAUD_CLAIM_CONFIRMED' }
-        : {}),
-    });
+    const payload = buildReportHandlePayload(
+      dialogRecord.value,
+      dialogForm.action,
+      dialogForm.result,
+    );
+    const consequence = payload.creditDelta
+      ? `并对被举报人扣减 ${Math.abs(payload.creditDelta)} 信用分`
+      : '且不会自动变更信用分';
+    await ElMessageBox.confirm(
+      `确认将该举报判定为${dialogForm.action === 'VALID' ? '有效' : '无效'}，${consequence}？此操作不可撤销。`,
+      '确认处理举报',
+      { type: 'warning', confirmButtonText: '确认处理', cancelButtonText: '取消' },
+    );
+    await handleReport(dialogRecord.value.id, payload);
     ElMessage.success('已处理');
     dialogVisible.value = false;
     await load();
   } catch (err) {
+    if (err === 'cancel' || err === 'close') return;
+    if (isConflictApiError(err)) {
+      dialogVisible.value = false;
+      ElMessage.warning('举报处理状态已变化，已关闭旧操作并刷新列表');
+      await load();
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '操作失败');
   } finally {
     submitting.value = false;
   }
 }
+
+watch(
+  () => dialogForm.action,
+  (action) => resetDialogForm(action),
+);
+
+watch(
+  () => route.query,
+  (query) => {
+    const nextPage = queryPositiveInt(query.page);
+    const nextStatus = queryEnum(
+      query.handleStatus,
+      Object.keys(reportStatusLabels) as ReportHandleStatus[],
+    );
+    const nextType = queryEnum(
+      query.targetType,
+      Object.keys(reportTargetTypeLabels) as ReportTargetType[],
+    );
+    if (
+      nextPage === page.value &&
+      nextStatus === handleStatus.value &&
+      nextType === targetType.value
+    ) return;
+    page.value = nextPage;
+    handleStatus.value = nextStatus;
+    targetType.value = nextType;
+    void load();
+  },
+);
 
 onMounted(load);
 </script>
@@ -145,17 +242,20 @@ onMounted(load);
     </el-card>
 
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="list" stripe border style="width: 100%">
+      <el-result v-if="errorMessage" icon="error" title="举报列表加载失败" :sub-title="errorMessage">
+        <template #extra><el-button type="primary" @click="load">重试</el-button></template>
+      </el-result>
+      <el-table v-else-if="loading || list.length" v-loading="loading" :data="list" stripe border style="width: 100%">
         <el-table-column prop="reason" label="举报原因" min-width="180" />
         <el-table-column label="目标类型" width="120">
           <template #default="{ row }">
-            {{ reportTargetTypeLabels[row.targetType as keyof typeof reportTargetTypeLabels] }}
+            {{ reportTargetTypeLabels[row.targetType as keyof typeof reportTargetTypeLabels] || '不支持的旧类型' }}
           </template>
         </el-table-column>
         <el-table-column label="目标" min-width="240" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link
-              v-if="targetRoute(row)"
+              v-if="reportTargetRoute(row)"
               type="primary"
               :underline="false"
               @click="goTarget(row)"
@@ -166,6 +266,12 @@ onMounted(load);
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="handleResult" label="处理结果" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.handleResult || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="handlerId" label="处理人 ID" min-width="180">
+          <template #default="{ row }">{{ row.handlerId || '—' }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <StatusTag variant="report" :value="row.handleStatus" />
@@ -179,14 +285,17 @@ onMounted(load);
             <el-button
               type="primary"
               size="small"
-              :disabled="row.handleStatus !== 'PENDING' && row.handleStatus !== 'PROCESSING'"
+              :disabled="!isSupportedReportTargetType(row.targetType) || (row.handleStatus !== 'PENDING' && row.handleStatus !== 'PROCESSING')"
+              :loading="submitting && dialogRecord?.id === row.id"
               @click="openDialog(row)"
             >
               处理
             </el-button>
+            <div v-if="!isSupportedReportTargetType(row.targetType)" class="muted">需后端补齐处置契约</div>
           </template>
         </el-table-column>
       </el-table>
+      <el-empty v-else description="当前筛选条件下没有举报" />
 
       <el-pagination
         v-if="total > pageSize"
@@ -196,11 +305,18 @@ onMounted(load);
         layout="prev, pager, next"
         background
         class="pagination"
-        @current-change="load"
+        @current-change="refresh"
       />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="处理举报" width="520px">
+    <el-dialog
+      v-model="dialogVisible"
+      title="处理举报"
+      width="520px"
+      :close-on-click-modal="!submitting"
+      :close-on-press-escape="!submitting"
+      :show-close="!submitting"
+    >
       <el-form label-position="top">
         <el-form-item label="举报原因">
           <el-input :model-value="dialogRecord?.reason" disabled />
@@ -221,12 +337,13 @@ onMounted(load);
           />
         </el-form-item>
         <el-form-item v-if="dialogForm.action === 'VALID'" label="信用分变动（被举报人）">
-          <el-input-number v-model="dialogForm.creditDelta" :min="-50" :max="0" />
+          <el-input-number v-model="dialogForm.creditDelta" disabled />
+          <span v-if="dialogForm.creditDelta === null" class="muted">当前目标类型没有自动扣分规则</span>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submit">确认处理</el-button>
+        <el-button :disabled="submitting" @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" :disabled="submitting" @click="submit">确认处理</el-button>
       </template>
     </el-dialog>
   </div>
@@ -245,6 +362,11 @@ onMounted(load);
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+.muted {
+  margin-left: 8px;
+  color: var(--xunji-text-muted);
+  font-size: 12px;
 }
 .pagination {
   margin-top: 14px;

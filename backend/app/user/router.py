@@ -27,7 +27,7 @@ async def send_sms_code(
     svc: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
     data = await svc.send_sms_code(req)
-    return success(data=data.model_dump(by_alias=True))
+    return success(data=data.model_dump(by_alias=True, exclude_none=True))
 
 
 @router.post("/auth/login")

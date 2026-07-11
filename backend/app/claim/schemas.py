@@ -12,8 +12,9 @@ VALID_REVIEW_STATUSES = {
     "REJECTED",
     "APPEALING",
     "HANDED_OVER",
+    "TERMINATED",
 }
-VALID_VERIFY_LEVELS = {"LEVEL_1", "LEVEL_2", "LEVEL_3", "FAST_TRACK"}
+VALID_VERIFY_LEVELS = {"LEVEL_1", "LEVEL_2", "LEVEL_3"}
 VALID_REVIEW_ACTIONS = {"APPROVE", "REJECT"}
 VALID_HANDOVER_METHODS = {"MEETUP", "PICKUP_POINT"}
 VALID_HANDOVER_ROLES = {"OWNER", "FINDER"}
@@ -87,7 +88,7 @@ class ClaimAnswerOutput(BaseModel):
     question_id: str
     question_text: str
     answer_text: str
-    match_score: float
+    match_score: float | None = None
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
@@ -111,11 +112,43 @@ class ClaimDetailResponse(BaseModel):
     verify_level: str
     review_status: str
     reject_reason: str | None = None
+    appeal_reason: str | None = None
     answers: list[ClaimAnswerOutput] = Field(default_factory=list)
     proof_image_urls: list[str] = Field(default_factory=list)
     proof_text: str | None = None
     handover: HandoverOutput | None = None
     claimed_at: str
+    updated_at: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class ClaimPartySummary(BaseModel):
+    id: str
+    nickname: str
+    phone: str
+    status: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class ClaimItemSummary(BaseModel):
+    id: str
+    item_name: str
+    category: str
+    status: str
+    review_status: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class AdminClaimListItem(BaseModel):
+    id: str
+    found_item_id: str
+    verify_level: str
+    review_status: str
+    reject_reason: str | None = None
+    appeal_reason: str | None = None
+    claimant: ClaimPartySummary
+    finder: ClaimPartySummary
+    item: ClaimItemSummary
     updated_at: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

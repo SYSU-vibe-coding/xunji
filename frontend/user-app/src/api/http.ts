@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-const AUTH_ERROR_CODES = new Set<number>([ErrorCode.UNAUTHORIZED, ErrorCode.FORBIDDEN]);
+const AUTH_ERROR_CODES = new Set<number>([ErrorCode.UNAUTHORIZED, ErrorCode.USER_DISABLED]);
 
 export function isAuthErrorCode(code: number): boolean {
   return AUTH_ERROR_CODES.has(code);
@@ -54,8 +54,12 @@ export function clearStoredToken(): void {
   }
 }
 
+export function resolveApiBaseUrl(value: string | undefined): string {
+  return value || '/api/v1';
+}
+
 const instance: AxiosInstance = axios.create({
-  baseURL: '/api/v1',
+  baseURL: resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
   timeout: 15000,
 });
 
@@ -93,10 +97,6 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
     const axiosErr = err as AxiosError<ApiEnvelope<unknown>>;
     const status = axiosErr.response?.status;
     const data = axiosErr.response?.data;
-    if (status === 401 || status === 403) {
-      clearStoredToken();
-      onUnauthorized?.();
-    }
     if (data && typeof data === 'object' && 'code' in data && 'message' in data) {
       const code = (data as ApiEnvelope<unknown>).code;
       if (isAuthErrorCode(code)) {
@@ -108,6 +108,10 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
         (data as ApiEnvelope<unknown>).message,
         (data as ApiEnvelope<unknown>).requestId,
       );
+    }
+    if (status === 401) {
+      clearStoredToken();
+      onUnauthorized?.();
     }
     const fallback = axiosErr.message || '网络异常，请稍后重试';
     throw new ApiError(status ?? -1, fallback);

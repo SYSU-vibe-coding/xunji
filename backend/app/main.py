@@ -9,22 +9,28 @@ from app.core.ai_client import AIClient
 from app.core.bootstrap import ensure_default_admin
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.core.object_storage import get_object_storage
+from app.job.runner import get_durable_job_runner
 from app.match.jobs import get_runner
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    for warning in settings.insecure_default_warnings():
-        logger.warning(warning)
+    settings.validate_startup_security()
+    await get_object_storage().ensure_private_bucket()
     await ensure_default_admin()
     app.state.ai_client = AIClient()
     runner = get_runner()
     app.state.match_runner = runner
     runner.start()
+    durable_runner = get_durable_job_runner()
+    app.state.durable_job_runner = durable_runner
+    durable_runner.start()
     try:
         yield
     finally:
+        await durable_runner.stop()
         await runner.stop()
         await app.state.ai_client.aclose()
         logger.info("Shutting down...")
@@ -37,10 +43,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

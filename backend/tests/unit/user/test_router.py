@@ -1,6 +1,26 @@
+import pytest
+from app.common.errors import ErrorCode
+from app.core.config import settings
 from app.user.models import User
+from app.user.service import _sms_codes, _sms_sent_at
 from httpx import AsyncClient
 from sqlalchemy import select
+
+
+@pytest.fixture(autouse=True)
+def _enable_debug_sms(monkeypatch):
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(settings, "SMS_DEBUG_ENABLED", True)
+    monkeypatch.setattr(
+        settings,
+        "SMS_DEMO_PHONES",
+        ",".join(f"1380000000{suffix}" for suffix in range(1, 10)),
+    )
+    _sms_codes.clear()
+    _sms_sent_at.clear()
+    yield
+    _sms_codes.clear()
+    _sms_sent_at.clear()
 
 
 async def _register_and_login(client: AsyncClient, phone: str, password: str = "secret123"):
@@ -24,6 +44,26 @@ async def _register_and_login(client: AsyncClient, phone: str, password: str = "
 
 
 class TestAuthRoutes:
+    async def test_sms_without_demo_mode_returns_unavailable(
+        self, client: AsyncClient, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "SMS_DEBUG_ENABLED", False)
+
+        resp = await client.post("/api/v1/auth/sms-code", json={"phone": "13800000008"})
+
+        assert resp.json()["code"] == ErrorCode.SMS_SERVICE_UNAVAILABLE
+        assert "13800000008" not in _sms_codes
+
+    async def test_sms_outside_debug_environment_returns_unavailable(
+        self, client: AsyncClient, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "DEBUG", False)
+
+        resp = await client.post("/api/v1/auth/sms-code", json={"phone": "13800000009"})
+
+        assert resp.json()["code"] == ErrorCode.SMS_SERVICE_UNAVAILABLE
+        assert "13800000009" not in _sms_codes
+
     async def test_register_and_password_login(self, client: AsyncClient):
         resp = await _register_and_login(client, "13800000001")
         assert resp.status_code == 200
@@ -82,19 +122,23 @@ class TestUserProfileRoutes:
     async def test_submit_and_get_certification(self, client: AsyncClient):
         login_resp = await _register_and_login(client, "13800000005")
         token = login_resp.json()["data"]["token"]
+        user_id = login_resp.json()["data"]["user"]["id"]
         headers = {"Authorization": f"Bearer {token}"}
+        document_ref = f"asset://CERT/{user_id}/202607/{'d' * 32}.jpg"
 
         resp = await client.post(
             "/api/v1/users/me/certification",
             json={
                 "campusId": "S20260001",
                 "realName": "Test User",
-                "documentImageUrl": "https://example.com/cert.jpg",
+                "documentImageRef": document_ref,
             },
             headers=headers,
         )
         body = resp.json()
         assert body["code"] == 0
+        assert body["data"]["documentImageRef"] == document_ref
+        assert body["data"]["documentImageUrl"].startswith("https://signed.test/")
         assert body["data"]["reviewStatus"] == "PENDING"
 
         get_resp = await client.get("/api/v1/users/me/certification", headers=headers)

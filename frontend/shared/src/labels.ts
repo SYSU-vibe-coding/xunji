@@ -91,13 +91,13 @@ export const claimStatusLabels: Record<ClaimReviewStatus, string> = {
   REJECTED: '已驳回',
   APPEALING: '申诉中',
   HANDED_OVER: '已交接',
+  TERMINATED: '已终止',
 };
 
 export const verifyLevelLabels: Record<VerifyLevel, string> = {
   LEVEL_1: '问答验证',
   LEVEL_2: '问答 + 凭证',
   LEVEL_3: '线下核对',
-  FAST_TRACK: '证件快捷通道',
 };
 
 export const handoverMethodLabels: Record<HandoverMethod, string> = {
@@ -118,7 +118,6 @@ export const reportTargetTypeLabels: Record<ReportTargetType, string> = {
   LOST_ITEM: '失物信息',
   FOUND_ITEM: '招领信息',
   CLAIM_REQUEST: '认领申请',
-  USER: '用户',
 };
 
 export const reportStatusLabels: Record<ReportHandleStatus, string> = {

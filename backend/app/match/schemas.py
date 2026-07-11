@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 VALID_MATCH_BIZ_TYPES = {"LOST", "FOUND"}
@@ -42,6 +42,12 @@ class MatchListQuery(BaseModel):
             raise ValueError(msg)
         return normalized
 
+    @model_validator(mode="after")
+    def validate_biz_pair(self) -> "MatchListQuery":
+        if (self.biz_type is None) != (self.biz_id is None):
+            raise ValueError("bizType and bizId must be provided together")
+        return self
+
 
 class MatchRecalculateRequest(BaseModel):
     biz_type: str = Field(..., alias="bizType")
@@ -77,6 +83,14 @@ class MatchListItem(BaseModel):
     location_score: float
     time_score: float
     total_score: float
+    image_available: bool
+    degraded: bool
+    score_source: Literal[
+        "RULE_BASED",
+        "TEXT_MODEL_RULES",
+        "MULTIMODAL_MODEL",
+        "LEGACY_RENORMALIZED",
+    ]
     match_status: str
     counterpart: MatchCounterpartSummary
     created_at: str
@@ -90,7 +104,6 @@ class MatchDetailResponse(MatchListItem):
 
 
 class MatchRecalculateResponse(BaseModel):
-    task_id: str
-    estimated_count: int
-    status: str = "COMPLETED"
+    matched_count: int
+    status: Literal["COMPLETED"] = "COMPLETED"
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

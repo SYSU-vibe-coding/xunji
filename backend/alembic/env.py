@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.credit.models import CreditLog  # noqa: F401
 from app.db.base import Base
 from app.item.models import FoundItem, ItemImage, LostItem, VerifyQuestion  # noqa: F401
+from app.job.models import DurableJob  # noqa: F401
 from app.match.models import MatchResult  # noqa: F401
 from app.notification.models import Notification  # noqa: F401
 from app.operation_log.models import OperationLog  # noqa: F401

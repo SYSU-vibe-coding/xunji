@@ -23,6 +23,10 @@ async def test_notification_service_list_and_mark_read(session, seeded_users):
     assert unread.total == 1
     assert unread.by_type["CLAIM_REQUEST"] == 1
 
-    await svc.mark_read(notice.id, "01TESTUSER000000000000001")
+    marked = await svc.mark_read(notice.id, "01TESTUSER000000000000001")
+    assert marked == {"id": notice.id, "isRead": True}
     unread = await svc.get_unread_count("01TESTUSER000000000000001")
     assert unread.total == 0
+
+    marked_all = await svc.mark_all_read("01TESTUSER000000000000001", None)
+    assert marked_all == {"updated": 0}

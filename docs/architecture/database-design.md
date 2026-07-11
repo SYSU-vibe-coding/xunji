@@ -147,11 +147,14 @@
 | id | char(26) | 主键 |
 | lost_item_id | char(26) | 失物 ID |
 | found_item_id | char(26) | 招领 ID |
-| image_score | decimal(5,2) | 图像相似度 |
+| image_score | decimal(5,2) | 图像相似度；图像维度不可用时为 0 |
 | text_score | decimal(5,2) | 文本相似度 |
 | location_score | decimal(5,2) | 地点匹配度 |
 | time_score | decimal(5,2) | 时间匹配度 |
 | total_score | decimal(5,2) | 综合评分 |
+| image_available | tinyint | 是否有真实图像模型参与 |
+| degraded | tinyint | 是否包含规则降级 |
+| score_source | varchar(32) | 评分来源 |
 | match_status | varchar(20) | 见 `enums.md` MatchStatus |
 | created_at | datetime | 创建时间 |
 
@@ -248,6 +251,8 @@
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
 
+唯一约束：`uk_report_reporter_target(reporter_id, target_type, target_id)`，保证同一举报人对同一精确目标最多一条举报；应用层将并发唯一冲突统一映射为 `REPORT_DUPLICATE`，不得重复处罚。
+
 ### 3.14 `announcements` 公告表
 
 | 字段 | 类型 | 说明 |
@@ -274,10 +279,31 @@
 | detail | varchar(500) | 操作说明 |
 | created_at | datetime | 创建时间 |
 
+### 3.16 `durable_jobs` 持久化任务/outbox 表
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | char(26) | ULID 主键 |
+| job_type | varchar(20) | `MATCH` / `CLASSIFY` / `SENSITIVE` |
+| biz_type | varchar(20) | `LOST` / `FOUND` |
+| biz_id | char(26) | 物品主键 |
+| biz_version | int | 同一物品每次发布/编辑递增的任务版本 |
+| status | varchar(20) | `PENDING` / `RUNNING` / `COMPLETED` / `FAILED` |
+| attempts | int | 已领取执行次数 |
+| run_after | datetime | 下次允许领取时间 |
+| locked_at | datetime | 当前领取时间，用于进程崩溃后回收 |
+| last_error | varchar(2000) | 最近一次错误摘要 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+唯一约束：`uk_durable_job_type_biz_version(job_type, biz_type, biz_id, biz_version)`。领取索引为 `(status, run_after, created_at)`；业务查询索引为 `(biz_type, biz_id, biz_version)`。
+
 ## 4. 数据一致性要求
 
 - 交接完成时，用 `async with session.begin():` 在一个事务内更新：认领状态、失物状态、招领状态、积分流水
 - 管理员审核操作必须同时记录日志和审批结果
+- 物品发布/编辑与对应 `durable_jobs` 必须同事务提交或回滚
+- 匹配结果、新匹配通知和任务 `COMPLETED` 必须同事务提交；任务执行必须允许重复调用
 - 删除类操作优先采用逻辑删除或状态关闭，不直接物理删除核心业务数据
 
 ## 5. 数据安全要求

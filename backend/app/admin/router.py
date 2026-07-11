@@ -47,12 +47,27 @@ async def review_certification(
 @router.get("/items/review")
 async def list_items_for_review(
     biz_type: str | None = Query(default=None, alias="bizType"),
+    target_id: str | None = Query(default=None, alias="targetId"),
     page_no: int = Query(default=1, ge=1, alias="pageNo"),
     page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
     admin_user: CurrentUser = Depends(require_admin()),
     svc: AdminService = Depends(get_admin_service),
 ) -> dict[str, Any]:
-    data = await svc.list_items_for_review(biz_type, page_no, page_size)
+    if target_id is not None:
+        target_id = validate_ulid(target_id, "targetId")
+    data = await svc.list_items_for_review(biz_type, target_id, page_no, page_size)
+    return success(data=data)
+
+
+@router.get("/items/{biz_type}/{item_id}")
+async def get_item_review_detail(
+    biz_type: str,
+    item_id: str,
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    item_id = validate_ulid(item_id, "itemId")
+    data = await svc.get_item_review_detail(biz_type, item_id, admin_user)
     return success(data=data)
 
 
@@ -94,6 +109,29 @@ async def handle_report(
     return success(data=data)
 
 
+@router.get("/claims")
+async def list_claims(
+    review_status: str | None = Query(default="APPEALING", alias="reviewStatus"),
+    page_no: int = Query(default=1, ge=1, alias="pageNo"),
+    page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    data = await svc.list_claims(review_status, page_no, page_size)
+    return success(data=data)
+
+
+@router.get("/claims/{claim_id}")
+async def get_claim_detail(
+    claim_id: str,
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    claim_id = validate_ulid(claim_id, "claimId")
+    data = await svc.get_claim_detail(claim_id)
+    return success(data=data)
+
+
 @router.post("/announcements")
 async def create_announcement(
     req: AnnouncementCreateRequest,
@@ -101,6 +139,40 @@ async def create_announcement(
     svc: AdminService = Depends(get_admin_service),
 ) -> dict[str, Any]:
     data = await svc.create_announcement(req, admin_user)
+    return success(data=data)
+
+
+@router.get("/announcements")
+async def list_announcements(
+    status: str | None = Query(default=None),
+    page_no: int = Query(default=1, ge=1, alias="pageNo"),
+    page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    data = await svc.list_announcements(status, page_no, page_size)
+    return success(data=data)
+
+
+@router.post("/announcements/{announcement_id}/publish")
+async def publish_announcement(
+    announcement_id: str,
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    announcement_id = validate_ulid(announcement_id, "announcementId")
+    data = await svc.publish_announcement(announcement_id, admin_user)
+    return success(data=data)
+
+
+@router.post("/announcements/{announcement_id}/offline")
+async def offline_announcement(
+    announcement_id: str,
+    admin_user: CurrentUser = Depends(require_admin()),
+    svc: AdminService = Depends(get_admin_service),
+) -> dict[str, Any]:
+    announcement_id = validate_ulid(announcement_id, "announcementId")
+    data = await svc.offline_announcement(announcement_id, admin_user)
     return success(data=data)
 
 
@@ -118,12 +190,15 @@ async def list_users(
     role: str | None = Query(default=None),
     status: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
+    user_id: str | None = Query(default=None, alias="userId"),
     page_no: int = Query(default=1, ge=1, alias="pageNo"),
     page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
     admin_user: CurrentUser = Depends(require_admin()),
     svc: AdminService = Depends(get_admin_service),
 ) -> dict[str, Any]:
-    data = await svc.list_users(role, status, keyword, page_no, page_size)
+    if user_id is not None:
+        user_id = validate_ulid(user_id, "userId")
+    data = await svc.list_users(role, status, keyword, user_id, page_no, page_size)
     return success(data=data)
 
 

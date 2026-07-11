@@ -35,6 +35,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/claim/ClaimDetailView.vue'),
       },
       { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tab: true } },
+      {
+        path: 'announcements',
+        name: 'announcements',
+        component: () => import('@/views/AnnouncementListView.vue'),
+      },
+      {
+        path: 'announcements/:id',
+        name: 'announcement-detail',
+        component: () => import('@/views/AnnouncementDetailView.vue'),
+      },
       { path: 'profile', name: 'profile', component: () => import('@/views/profile/ProfileView.vue'), meta: { tab: true } },
       { path: 'profile/items', name: 'my-items', component: () => import('@/views/profile/MyItemsView.vue') },
       {

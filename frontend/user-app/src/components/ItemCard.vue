@@ -16,6 +16,7 @@ const props = defineProps<{
   kind: Kind;
   item: FoundItemSummary | LostItemSummary;
   hideStatus?: boolean;
+  showReview?: boolean;
 }>();
 
 defineEmits<{ open: [id: string, kind: Kind] }>();
@@ -57,11 +58,15 @@ const cover = computed(() => props.item.coverImageUrl);
           :variant="kind"
           :value="item.status"
         />
+        <StatusTag v-if="showReview" variant="review" :value="item.reviewStatus" />
       </div>
     </div>
     <div class="body">
       <h3>{{ item.itemName }}</h3>
       <p class="desc">{{ item.description || '暂无描述' }}</p>
+      <p v-if="showReview && item.reviewComment" class="review-comment">
+        审核意见：{{ item.reviewComment }}
+      </p>
       <div class="meta">
         <span>📍 {{ location }}</span>
         <span>🕒 {{ time }}</span>
@@ -138,6 +143,16 @@ const cover = computed(() => props.item.coverImageUrl);
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .review-comment {
+    margin: -4px 0 10px;
+    padding: 7px 9px;
+    border-radius: 7px;
+    background: var(--el-color-warning-light-9);
+    color: var(--el-color-warning-dark-2);
+    font-size: 12px;
+    line-height: 1.45;
   }
 
   .meta {

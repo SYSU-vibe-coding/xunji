@@ -18,6 +18,7 @@ class ErrorCode:
     CERT_INCOMPLETE = 41003
     CERT_PENDING = 41004
     USER_DISABLED = 41005
+    SMS_SERVICE_UNAVAILABLE = 41006
 
     # Item 42xxx
     ITEM_NOT_FOUND = 42001
@@ -74,6 +75,7 @@ _CODE_MESSAGES: dict[int, str] = {
     ErrorCode.CERT_INCOMPLETE: "认证资料不完整",
     ErrorCode.CERT_PENDING: "已有待审批认证",
     ErrorCode.USER_DISABLED: "用户已禁用或注销",
+    ErrorCode.SMS_SERVICE_UNAVAILABLE: "短信服务当前不可用",
     ErrorCode.ITEM_NOT_FOUND: "物品不存在",
     ErrorCode.ITEM_CLOSED: "物品已关闭/已完成,不可修改",
     ErrorCode.IMAGE_EXCEED: "图片数量超限(>5)",

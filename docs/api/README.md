@@ -36,6 +36,7 @@
 | PUT | /api/v1/found-items/{id} | 用户（本人）/ STAFF |
 | PATCH | /api/v1/lost-items/{id}/status | 用户（本人） |
 | PATCH | /api/v1/found-items/{id}/status | ADMIN / 用户（本人） |
+| POST | /api/v1/reports | 用户 |
 | POST | /api/v1/files/upload | 用户 |
 
 ### 匹配（`match.md`）
@@ -64,6 +65,8 @@
 | GET | /api/v1/notifications/unread-count | 用户 |
 | POST | /api/v1/notifications/{id}/read | 用户 |
 | POST | /api/v1/notifications/read-all | 用户 |
+| GET | /api/v1/announcements | 公开 |
+| GET | /api/v1/announcements/{id} | 公开 |
 
 ### 后台（`admin.md`）
 | 方法 | 路径 | 权限 |
@@ -74,6 +77,8 @@
 | POST | /api/v1/admin/items/{bizType}/{id}/review | ADMIN |
 | GET | /api/v1/admin/reports | ADMIN |
 | POST | /api/v1/admin/reports/{id}/handle | ADMIN |
+| GET | /api/v1/admin/claims | ADMIN |
+| GET | /api/v1/admin/claims/{id} | ADMIN |
 | POST | /api/v1/admin/announcements | ADMIN |
 | GET | /api/v1/admin/dashboard | ADMIN |
 | GET | /api/v1/admin/users | ADMIN |

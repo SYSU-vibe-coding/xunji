@@ -65,15 +65,20 @@
 ### MatchStatus（`match_results.match_status`）
 `NEW` / `READ` / `CLAIMED` / `EXPIRED`
 
+### DurableJobType（`durable_jobs.job_type`）
+`MATCH` / `CLASSIFY` / `SENSITIVE`
+
+### DurableJobStatus（`durable_jobs.status`）
+`PENDING` / `RUNNING` / `COMPLETED` / `FAILED`
+
 ### VerifyLevel（`claim_requests.verify_level`）
 | 值 | 说明 |
 |---|---|
 | LEVEL_1 | 问答验证 |
 | LEVEL_2 | 问答 + 凭证 |
-| LEVEL_3 | 线下核对 |
-| FAST_TRACK | 敏感证件快捷通道，系统自动比对实名信息 |
+| LEVEL_3 | 凭证 + 人工核对 |
 
-判定规则见 `matching-rules.md §3`。
+判定规则见 `matching-rules.md §5`。
 
 ### ClaimReviewStatus（`claim_requests.review_status`）
 | 值 | 说明 |
@@ -85,6 +90,7 @@
 | REJECTED | 被拒绝 |
 | APPEALING | 申诉中 |
 | HANDED_OVER | 已交接完成 |
+| TERMINATED | 因物品下架、关闭或治理流程被终止 |
 
 ### HandoverMethod（`handover_records.method`）
 `MEETUP`（当面交接） / `PICKUP_POINT`（指定代收点）

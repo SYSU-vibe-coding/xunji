@@ -17,11 +17,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from datetime import datetime, timedelta
-from decimal import Decimal
 from typing import Any
 
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.utils import now_beijing
 from app.core.ai_client import AIClient
@@ -29,9 +27,9 @@ from app.core.config import settings
 from app.db.session import async_session_factory
 from app.db.ulid import generate_ulid
 from app.item.service import ItemService
-from app.match.models import MatchResult
 from app.match.repository import MatchResultRepository
 from app.match.scoring import rule_based_score
+from app.match.service import _persist_scored_match, _push_match_notices
 
 
 class MatchJobRunner:
@@ -259,6 +257,8 @@ class MatchJobRunner:
                 if lp is None:
                     continue
                 for found in founds:
+                    if found.user_id == lost.user_id:
+                        continue
                     fp = found_payloads.get(found.id)
                     if fp is None:
                         continue
@@ -304,20 +304,25 @@ class MatchJobRunner:
                             continue
                         lost_id, found_id, scores = entry
                         total = float(scores.get("totalScore", 0))
-                        if total < 70.0:
+                        match_obj, should_notify = await _persist_scored_match(
+                            session,
+                            item_svc,
+                            repo,
+                            lost_id,
+                            found_id,
+                            scores,
+                        )
+                        if match_obj is None:
                             continue
-                        match_obj, is_new = await _upsert_match(repo, lost_id, found_id, scores)
                         written += 1
-                        if is_new:
+                        if should_notify:
                             new_matches.append((match_obj.id, lost_id, found_id, total))
-
-                    await session.commit()
 
                     # Push notifications for newly created matches.
                     if new_matches:
                         await _push_match_notices(session, item_svc, new_matches)
-                        await session.commit()
                         new_matches.clear()
+                    await session.commit()
 
                     async with self._lock:
                         self._processed_pairs = min(start + len(batch), len(pairs))
@@ -329,70 +334,6 @@ class MatchJobRunner:
                 self._processed_pairs = len(pairs)
                 self._written_matches = written
             return written
-
-
-async def _upsert_match(
-    repo: MatchResultRepository,
-    lost_id: str,
-    found_id: str,
-    scores: dict[str, Any],
-) -> tuple[MatchResult, bool]:
-    """Upsert a match row. Returns (match, is_new)."""
-    existing = await repo.get_by_pair(lost_id, found_id)
-    if existing is None:
-        match = MatchResult(
-            id=generate_ulid(),
-            lost_item_id=lost_id,
-            found_item_id=found_id,
-            image_score=Decimal(str(scores.get("imageScore", 0))),
-            text_score=Decimal(str(scores.get("textScore", 0))),
-            location_score=Decimal(str(scores.get("locationScore", 0))),
-            time_score=Decimal(str(scores.get("timeScore", 0))),
-            total_score=Decimal(str(scores.get("totalScore", 0))),
-            match_status="NEW",
-        )
-        await repo.create(match)
-        return match, True
-    existing.image_score = Decimal(str(scores.get("imageScore", 0)))
-    existing.text_score = Decimal(str(scores.get("textScore", 0)))
-    existing.location_score = Decimal(str(scores.get("locationScore", 0)))
-    existing.time_score = Decimal(str(scores.get("timeScore", 0)))
-    existing.total_score = Decimal(str(scores.get("totalScore", 0)))
-    await repo.update(existing)
-    return existing, False
-
-
-async def _push_match_notices(
-    session: AsyncSession,
-    item_svc: ItemService,
-    matches: list[tuple[str, str, str, float]],
-) -> None:
-    """Notify the lost-item owner for each newly created match >= 70.
-
-    For >= 90 on CERT items, use HIGH priority (matching-rules.md §3).
-    """
-    from app.notification.service import NotificationService
-
-    notify_svc = NotificationService(session)
-    for match_id, lost_id, found_id, total in matches:
-        try:
-            lost_item = await item_svc.get_lost_item_internal(lost_id)
-            found_item = await item_svc.get_found_item_internal(found_id)
-        except Exception as exc:  # pragma: no cover
-            logger.warning(f"[match-job] notice lookup failed: {exc}")
-            continue
-        if lost_item is None or found_item is None:
-            continue
-        priority = "HIGH" if total >= 90.0 and found_item.category == "CERT" else "NORMAL"
-        await notify_svc.create_notice(
-            user_id=lost_item.user_id,
-            notice_type="MATCH_RECOMMEND",
-            title=f"发现疑似匹配物品 (评分 {total:.0f})",
-            content=f"您的失物「{lost_item.item_name}」可能与招领「{found_item.item_name}」匹配",
-            related_type="MATCH",
-            related_id=match_id,
-            priority=priority,
-        )
 
 
 def _format_dt(dt: datetime | None) -> str | None:

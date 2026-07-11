@@ -1,6 +1,7 @@
 import type {
   AnnouncementStatus,
   CertStatus,
+  ClaimReviewStatus,
   FoundItemStatus,
   ItemCategory,
   LostItemStatus,
@@ -11,7 +12,10 @@ import type {
   ReviewStatus,
   UserRole,
   UserStatus,
+  VerifyLevel,
 } from '../enums';
+import type { ClaimAnswerOutput, ClaimDetail } from './claim';
+import type { VerifyQuestionOutput } from './item';
 
 export interface DashboardStats {
   totalUsers: number;
@@ -32,6 +36,7 @@ export interface CertificationReview {
   realName: string | null;
   documentImageUrl: string;
   reviewStatus: ReviewStatus;
+  reviewComment: string | null;
   createdAt: string;
 }
 
@@ -45,9 +50,68 @@ export interface ItemReviewRecord {
   ownerNickname: string;
   status: LostItemStatus | FoundItemStatus;
   reviewStatus: ReviewStatus;
+  reviewComment: string | null;
   isSensitive: boolean;
   reportCount: number;
   createdAt: string;
+}
+
+export interface AdminPartySummary {
+  id: string;
+  nickname: string;
+  phone: string;
+  status: UserStatus;
+}
+
+export interface ItemReviewDetail {
+  id: string;
+  userId: string;
+  bizType: 'LOST' | 'FOUND';
+  itemName: string;
+  category: ItemCategory;
+  description: string | null;
+  lostTimeStart?: string;
+  lostTimeEnd?: string;
+  lostLocation?: string;
+  foundTime?: string;
+  foundLocation?: string;
+  status: LostItemStatus | FoundItemStatus;
+  reviewStatus: ReviewStatus;
+  reviewComment: string | null;
+  isSensitive?: boolean;
+  imageUrls: string[];
+  verifyQuestions?: VerifyQuestionOutput[];
+  publisher: AdminPartySummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminClaimItemSummary {
+  id: string;
+  itemName: string;
+  category: ItemCategory;
+  status: FoundItemStatus;
+  reviewStatus: ReviewStatus;
+}
+
+export interface AdminClaimRecord {
+  id: string;
+  foundItemId: string;
+  verifyLevel: VerifyLevel;
+  reviewStatus: ClaimReviewStatus;
+  rejectReason: string | null;
+  appealReason: string | null;
+  claimant: AdminPartySummary;
+  finder: AdminPartySummary;
+  item: AdminClaimItemSummary;
+  updatedAt: string;
+}
+
+export interface AdminClaimDetail extends ClaimDetail {
+  answers: ClaimAnswerOutput[];
+  claimant: AdminPartySummary;
+  finder: AdminPartySummary;
+  item: AdminClaimItemSummary;
 }
 
 export interface ReportRecord {
@@ -59,6 +123,8 @@ export interface ReportRecord {
   reason: string;
   description: string;
   handleStatus: ReportHandleStatus;
+  handleResult: string | null;
+  handlerId: string | null;
   createdAt: string;
 }
 
@@ -85,6 +151,11 @@ export interface CertificationQuery extends AdminPageQuery {
 
 export interface ItemReviewQuery extends AdminPageQuery {
   bizType?: 'LOST' | 'FOUND';
+  targetId?: string;
+}
+
+export interface AdminClaimQuery extends AdminPageQuery {
+  reviewStatus?: ClaimReviewStatus;
 }
 
 export interface ReportQuery extends AdminPageQuery {
@@ -121,10 +192,24 @@ export interface AnnouncementCreateResponse {
   status: AnnouncementStatus;
 }
 
-export interface UserStatusRequest {
-  status: UserStatus;
-  reason?: string;
+export interface AnnouncementRecord {
+  id: string;
+  title: string;
+  content: string;
+  status: AnnouncementStatus;
+  publishedBy: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface AnnouncementQuery extends AdminPageQuery {
+  status?: AnnouncementStatus;
+}
+
+export type UserStatusRequest =
+  | { status: 'DISABLED'; reason: string }
+  | { status: 'ACTIVE'; reason?: string };
 
 export interface MatchJobStatus {
   status: 'idle' | 'running' | 'stopping';

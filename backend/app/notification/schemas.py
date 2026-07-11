@@ -59,3 +59,18 @@ class UnreadCountResponse(BaseModel):
     total: int
     by_type: dict[str, int]
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class AnnouncementListItem(BaseModel):
+    id: str
+    title: str
+    published_at: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class AnnouncementDetail(BaseModel):
+    id: str
+    title: str
+    content: str
+    published_at: str
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

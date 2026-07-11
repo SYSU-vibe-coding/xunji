@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bell, Document, HomeFilled, Plus, Search, User } from '@element-plus/icons-vue';
+import { Bell, Document, HomeFilled, Plus, Reading, Search, User } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -10,6 +10,7 @@ const items = [
   { key: 'home', label: '首页', icon: HomeFilled, route: '/' },
   { key: 'search', label: '检索', icon: Search, route: '/search' },
   { key: 'publish', label: '发布', icon: Plus, route: '__publish__', accent: true },
+  { key: 'announcements', label: '公告', icon: Reading, route: '/announcements' },
   { key: 'notifications', label: '消息', icon: Bell, route: '/notifications' },
   { key: 'profile', label: '我的', icon: User, route: '/profile' },
 ];
@@ -83,7 +84,9 @@ function pickPublish(target: string) {
 <style scoped lang="scss">
 .mobile-dock {
   display: none;
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 12;
   background: var(--xunji-surface);

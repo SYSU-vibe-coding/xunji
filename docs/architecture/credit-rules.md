@@ -25,7 +25,10 @@
 ## 3. 写入约定
 
 - 积分变动与业务状态变更**必须在同一事务**
+- `change_credit` 只加入调用方事务，不自行 `commit`；调用方负责与业务状态一起提交
+- 更新前锁定用户行，将积分裁剪到 `[0, 999]` 后，以 `actual_delta = new_score - old_score` 作为流水、通知和审计中的变动值
 - 每次变动都产生一条 `credit_logs` 记录，包含 `biz_type` 和 `biz_id`（指向触发业务）
+- 边界裁剪后 `actual_delta = 0` 仍写幂等流水，通知和审计明确标注已达积分边界
 - `users.credit_score` 在事务中同步更新，不依赖事后聚合
 - 变动后发送 `NoticeType = CREDIT_CHANGED` 通知
 
@@ -37,5 +40,5 @@
 
 ## 5. 反作弊
 
-- 同一 `biz_id + reason_code` 不重复扣/加分（数据库层加唯一索引 `uk_credit_biz(user_id, biz_type, biz_id, reason_code)`）
+- 同一 `biz_id + reason_code` 不重复扣/加分；以数据库唯一约束 `uk_credit_dedup(user_id, biz_type, biz_id, reason_code)` 兜底，并用 savepoint 回滚并发冲突中的整次积分变化而不影响外层业务事务
 - `FOUND_ITEM_PUBLISHED` 按 `user_id + DATE(created_at)` 限流 5 次

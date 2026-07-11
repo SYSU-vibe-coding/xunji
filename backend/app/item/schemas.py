@@ -11,8 +11,8 @@ VALID_REVIEW_STATUSES = {"PENDING", "APPROVED", "REJECTED"}
 VALID_CUSTODY_TYPES = {"SELF", "SECURITY", "OFFICE"}
 VALID_CONTACT_PREFERENCES = {"IN_APP", "PHONE"}
 VALID_BIZ_TYPES = {"LOST", "FOUND", "CLAIM_PROOF", "CERT"}
-VALID_SORT_OPTIONS = {"CREATED_DESC", "CREATED_ASC"}
-VALID_REPORT_TARGET_TYPES = {"LOST_ITEM", "FOUND_ITEM"}
+VALID_SORT_OPTIONS = {"CREATED_DESC", "CREATED_ASC", "EVENT_DESC", "EVENT_ASC"}
+VALID_REPORT_TARGET_TYPES = {"LOST_ITEM", "FOUND_ITEM", "CLAIM_REQUEST"}
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -137,6 +137,7 @@ class LostItemListItem(BaseModel):
     lost_location: str
     status: str
     review_status: str
+    review_comment: str | None = None
     cover_image_url: str | None = None
     created_at: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
@@ -154,8 +155,10 @@ class LostItemDetail(BaseModel):
     subscribe_match: bool
     status: str
     review_status: str
+    review_comment: str | None = None
     cover_image_url: str | None = None
     image_urls: list[str] = Field(default_factory=list)
+    image_refs: list[str] | None = None
     match_count: int | None = None  # only visible to publisher
     created_at: str
     updated_at: str
@@ -319,6 +322,7 @@ class FoundItemListItem(BaseModel):
     contact_preference: str
     status: str
     review_status: str
+    review_comment: str | None = None
     cover_image_url: str | None = None
     created_at: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
@@ -343,7 +347,9 @@ class FoundItemDetail(BaseModel):
     contact_preference: str
     status: str
     review_status: str
+    review_comment: str | None = None
     image_urls: list[str] = Field(default_factory=list)
+    image_refs: list[str] | None = None
     verify_questions: list[VerifyQuestionOutput] = Field(default_factory=list)
     has_active_claim: bool = False
     created_at: str
@@ -416,6 +422,8 @@ class LostItemQuery(BaseModel):
     status: str | None = None
     keyword: str | None = None
     location: str | None = None
+    event_time_start: str | None = Field(default=None, alias="eventTimeStart")
+    event_time_end: str | None = Field(default=None, alias="eventTimeEnd")
     sort_by: str = Field(default="CREATED_DESC", alias="sortBy")
     # 默认排除终态 (FOUND/CLOSED); "我的发布" 等需要看历史的页面传 true
     include_closed: bool = Field(default=False, alias="includeClosed")
@@ -439,6 +447,22 @@ class LostItemQuery(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("event_time_start", "event_time_end")
+    @classmethod
+    def validate_event_time(cls, v: str | None, info: ValidationInfo) -> str | None:
+        if v is not None:
+            _parse_datetime(v, info.field_name or "eventTime")
+        return v
+
+    @model_validator(mode="after")
+    def validate_event_time_range(self) -> "LostItemQuery":
+        if self.event_time_start and self.event_time_end:
+            start = _parse_datetime(self.event_time_start, "eventTimeStart")
+            end = _parse_datetime(self.event_time_end, "eventTimeEnd")
+            if end < start:
+                raise ValueError("eventTimeEnd must be greater than or equal to eventTimeStart")
+        return self
+
 
 class FoundItemQuery(BaseModel):
     page_no: int = Field(default=1, ge=1, alias="pageNo")
@@ -447,6 +471,8 @@ class FoundItemQuery(BaseModel):
     status: str | None = None
     keyword: str | None = None
     location: str | None = None
+    event_time_start: str | None = Field(default=None, alias="eventTimeStart")
+    event_time_end: str | None = Field(default=None, alias="eventTimeEnd")
     is_sensitive: bool | None = Field(default=None, alias="isSensitive")
     custody_type: str | None = Field(default=None, alias="custodyType")
     sort_by: str = Field(default="CREATED_DESC", alias="sortBy")
@@ -477,12 +503,29 @@ class FoundItemQuery(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("event_time_start", "event_time_end")
+    @classmethod
+    def validate_event_time(cls, v: str | None, info: ValidationInfo) -> str | None:
+        if v is not None:
+            _parse_datetime(v, info.field_name or "eventTime")
+        return v
+
+    @model_validator(mode="after")
+    def validate_event_time_range(self) -> "FoundItemQuery":
+        if self.event_time_start and self.event_time_end:
+            start = _parse_datetime(self.event_time_start, "eventTimeStart")
+            end = _parse_datetime(self.event_time_end, "eventTimeEnd")
+            if end < start:
+                raise ValueError("eventTimeEnd must be greater than or equal to eventTimeStart")
+        return self
+
 
 # ---- File upload ----
 
 
 class FileUploadResponse(BaseModel):
-    url: str
+    asset_ref: str
+    preview_url: str
     content_type: str
     size: int
     uploaded_at: str

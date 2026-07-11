@@ -99,6 +99,7 @@
 | 41003 | 认证资料不完整 |
 | 41004 | 已有待审批认证 |
 | 41005 | 用户已禁用或注销 |
+| 41006 | 短信服务当前不可用 |
 
 ### 物品 42xxx
 | 码 | 含义 |
@@ -149,13 +150,29 @@
 | 48001 | 审核对象状态已变更 |
 | 48002 | 非管理员操作 |
 
+治理审核、举报处理均通过行锁和源状态条件更新实现。认证/内容审核仅接受 `PENDING`，举报处理仅接受 `PENDING/PROCESSING`；重复或并发请求统一返回 `48001`。
+
 ## 8. 文件与图片
 
 - 图片：`image/jpeg` / `image/png` / `image/webp`，单文件 ≤ 10MB
+- 服务端按实际图片内容解码，限制总像素，拒绝 decompression bomb；不信任客户端 MIME、文件名或扩展名
+- 上传后按真实格式重新编码为 JPEG/PNG/WebP 并剥离 EXIF/文本元数据
 - 每条失物/招领 ≤ 5 张
 - 证件凭证等文件走同一上传接口，由 `bizType` 区分
-- 对象存储 key：`<bizType>/<yyyyMM>/<uuid>.<ext>`
-- 返回的 `imageUrl` 为带签名的访问 URL，有效期 7 天（敏感物品仅 1 小时，且仅管理员/归属方可访问）
+- 对象存储 key：`<bizType>/<uploaderUserId>/<yyyyMM>/<uuid>.<真实扩展名>`
+- bucket 必须为私有；后端启动和上传都会删除已有 bucket policy，禁止匿名 `GetObject`
+- 上传返回稳定 `assetRef`（`asset://<object-key>`）和短时 `previewUrl`；数据库只保存 `assetRef`，禁止保存 presigned URL
+- 新业务提交只接受当前用户、对应 `bizType` 的 `assetRef`，并通过对象 `stat` 校验；外部 URL 和其他用户引用均拒绝
+- API 读取时动态签发 GET URL：普通资源默认 7 天，CERT/CLAIM_PROOF/敏感 FOUND/类别为 CERT 的 LOST 默认 1 小时
+- 敏感 FOUND 和类别为 CERT 的 LOST 对非发布者/非管理员返回空图片并保留敏感标志/类别；CERT 仅申请人/管理员，CLAIM_PROOF 仅认领双方/管理员。所有敏感 URL 字段在对象不可用时均允许为 null（数组场景则省略不可用项），不得回退为持久化原值
+- AI 服务只接收使用 `MINIO_ENDPOINT` 独立动态签发的内部短时 URL，不接收浏览器 preview URL、`assetRef` 或永久公开 URL
+
+### 8.1 现存数据兼容与迁移
+
+- 读取层只兼容本项目当前 MinIO endpoint、bucket 下的历史 URL，并提取 object key 后重新签名；其他域名历史值按不可用处理，不原样返回
+- 可在停写窗口审计 `item_images.image_url`、`item_images.masked_image_url`、`user_cert_requests.document_image_url` 和 `users.avatar_url`，将形如 `<MINIO_PUBLIC_BASE_URL>/<bucket>/<key>` 的值改为 `asset://<key>`
+- 迁移前必须确认 host、bucket 和 object key，外部 URL 不得自动导入；建议先备份并用 MinIO `stat` 校验对象存在性
+- 兼容读取仅用于受控迁移，新建和编辑接口不会接受历史 URL
 
 ## 9. 鉴权与权限标注
 

@@ -8,7 +8,7 @@ export interface SmsCodeResponse {
   sent: boolean;
   expiresIn: number;
   /** 仅本地开发返回，正式环境为空 */
-  debugCode: string;
+  debugCode?: string;
 }
 
 export interface LoginRequest {
@@ -46,6 +46,7 @@ export interface UserProfile {
   phone: string;
   nickname: string;
   avatarUrl: string | null;
+  avatarRef: string | null;
   role: UserRole;
   certStatus: CertStatus;
   campusId: string | null;
@@ -56,13 +57,13 @@ export interface UserProfile {
 
 export interface UpdateProfileRequest {
   nickname?: string;
-  avatarUrl?: string;
+  avatarRef?: string;
 }
 
 export interface CertificationRequest {
   campusId: string;
   realName: string;
-  documentImageUrl: string;
+  documentImageRef: string;
 }
 
 export interface CertificationDetail {
@@ -70,6 +71,7 @@ export interface CertificationDetail {
   campusId: string;
   realName: string | null;
   documentImageUrl: string;
+  documentImageRef: string | null;
   reviewStatus: ReviewStatus;
   reviewComment: string | null;
   reviewedAt: string | null;

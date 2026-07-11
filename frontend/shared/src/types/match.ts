@@ -1,6 +1,11 @@
 import type { BizType, ItemCategory, MatchStatus } from '../enums';
 
 export type MatchBizType = Extract<BizType, 'LOST' | 'FOUND'>;
+export type MatchScoreSource =
+  | 'RULE_BASED'
+  | 'TEXT_MODEL_RULES'
+  | 'MULTIMODAL_MODEL'
+  | 'LEGACY_RENORMALIZED';
 
 export interface MatchSummary {
   matchId: string;
@@ -11,6 +16,9 @@ export interface MatchSummary {
   locationScore: number;
   timeScore: number;
   totalScore: number;
+  imageAvailable: boolean;
+  degraded: boolean;
+  scoreSource: MatchScoreSource;
   matchStatus: MatchStatus;
   counterpart: {
     id: string;
@@ -45,7 +53,6 @@ export interface MatchRecalculateRequest {
 }
 
 export interface MatchRecalculateResponse {
-  taskId: string;
-  estimatedCount: number;
-  status?: string;
+  matchedCount: number;
+  status: 'COMPLETED';
 }

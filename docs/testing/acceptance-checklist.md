@@ -1,12 +1,13 @@
 # 验收清单
 
-最近一次自动化验证：2026-06-01，本地 `zzh` 分支。
+最近一次自动化验证：2026-07-11，P0/P1 修复后本地工作区。
 
-- 后端：`uv run ruff check .` 通过；`uv run pytest` 通过（79 passed）
-- AI 服务：`uv run ruff check .` 通过；`uv run pytest` 通过（34 passed）
-- 用户端：`pnpm lint` 通过；`pnpm test:unit --run` 通过（新增格式化工具测试）
-- 管理端：`pnpm lint` 通过；`pnpm test:unit --run` 通过（新增格式化工具测试）
-- Docker：`docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml up -d --no-build` 已启动全套服务；后端、AI、用户端、管理端、MinIO smoke 通过
+- 后端：`uv run ruff check .`、`uv run mypy app`、`uv run pytest` 通过（197 passed）
+- AI 服务：`uv run ruff check .`、`uv run mypy app`、`uv run pytest` 通过（59 passed）
+- 用户端：`pnpm test:unit` 通过（15 passed）；`pnpm build` 通过
+- 管理端：`pnpm test:unit` 通过（15 passed）；`pnpm build` 通过
+- 数据库迁移：`uv run alembic heads` 为单一 `20260711_0008 (head)`
+- Compose：Docker/Podman 配置已展开验证；当前环境未执行完整容器 smoke，不能标记为已通过
 
 ## 1. 功能验收
 
@@ -23,7 +24,7 @@
 - [x] 交接完成后状态可以自动关闭（后端服务测试覆盖）
 - [x] 系统可以发送站内消息（后端服务测试覆盖）
 - [x] 管理后台可以处理举报和查看基础统计（后端接口测试覆盖）
-- [x] 浏览器端 P0 入口 smoke 通过（登录、搜索、匹配、管理端 dashboard）
+- [ ] 浏览器端双用户 P0 流程通过（待在真实 MySQL/MinIO 容器环境执行）
 
 ## 2. 数据与状态验收
 
@@ -32,12 +33,18 @@
 - [x] 认领状态流转正确（后端测试覆盖）
 - [x] 交接完成后生成交接记录（后端测试覆盖）
 - [x] 交接完成后产生积分流水（后端测试覆盖）
+- [x] 发布/编辑与 durable job 同事务落库，失败回滚不留孤立任务（后端任务测试覆盖）
+- [x] 任务失败退避重试、达到上限转 FAILED，重启可回收遗留 RUNNING（后端任务测试覆盖）
 
 ## 3. 安全与权限验收
 
 - [x] 未登录用户无法访问受保护资源（后端接口测试覆盖）
 - [x] 普通用户无法访问管理员接口（后端接口测试覆盖）
 - [x] 敏感物品信息不对外暴露原图（后端服务测试覆盖）
+- [x] 含图片招领 fail closed，仅全部明确安全时解除敏感标记（后端服务/任务测试覆盖）
+- [x] 对象存储 bucket 私有，业务数据库仅保存稳定资产引用（后端对象存储测试覆盖）
+- [x] 短信调试码仅对显式演示白名单开放（后端认证安全测试覆盖）
+- [x] 默认密钥、默认管理员密码在非本地环境拒绝启动（配置测试覆盖）
 - [x] 管理员关键操作有日志记录（后端服务路径覆盖）
 
 ## 4. 文档与交付验收
@@ -46,4 +53,13 @@
 - [x] 数据库设计文档已更新
 - [x] 测试用例已执行并有结果记录
 - [x] 部署说明可供他人复现
-- [x] 演示账号和演示数据准备完成（本地 Docker 数据卷）
+- [ ] 使用新迁移重建演示数据并完成双用户浏览器验收
+
+## 5. 环境验收待办
+
+- [ ] 轮换本地工作区中曾出现过的第三方 token 和远程数据库口令
+- [ ] 使用非默认 JWT、管理员、MySQL 和 MinIO 密钥启动全套容器
+- [ ] 在 MySQL 8.4 执行 `alembic upgrade head` 并验证 `20260711_0008`
+- [ ] 验证 MinIO 未配置匿名 bucket policy，敏感原图匿名访问返回拒绝
+- [ ] 执行两个普通用户和一个管理员的发布、匹配、认领、申诉、交接、举报浏览器流程
+- [ ] 执行并发认领、并发审批和并发双确认的 MySQL 集成测试

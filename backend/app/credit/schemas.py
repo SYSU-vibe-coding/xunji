@@ -1,16 +1,21 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
-VALID_CREDIT_REASON_CODES = {
-    "HANDOVER_SUCCESS",
-    "FOUND_ITEM_PUBLISHED",
-    "PEER_GOOD_REVIEW",
-    "CERT_APPROVED",
-    "CLAIM_REJECTED_NO_APPEAL",
-    "FRAUD_CLAIM_CONFIRMED",
-    "FAKE_PUBLISH_CONFIRMED",
-    "CLAIM_TIMEOUT_NO_REPLY",
+_CREDIT_REASON_DELTAS = {
+    "HANDOVER_SUCCESS": 10,
+    "FOUND_ITEM_PUBLISHED": 3,
+    "PEER_GOOD_REVIEW": 5,
+    "CERT_APPROVED": 20,
+    "CLAIM_REJECTED_NO_APPEAL": -5,
+    "FRAUD_CLAIM_CONFIRMED": -30,
+    "FAKE_PUBLISH_CONFIRMED": -20,
+    "CLAIM_TIMEOUT_NO_REPLY": -3,
 }
+VALID_CREDIT_REASON_CODES = frozenset(_CREDIT_REASON_DELTAS)
+
+
+def credit_delta_for_reason(reason_code: str) -> int | None:
+    return _CREDIT_REASON_DELTAS.get(reason_code)
 
 
 class CreditLogItem(BaseModel):

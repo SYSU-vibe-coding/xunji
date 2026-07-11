@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
-def patch_session_factory(monkeypatch, session: AsyncSession):
+def patch_session_factory(monkeypatch, session: AsyncSession, seeded_users: None):
     @asynccontextmanager
     async def factory():
         yield session
@@ -88,7 +88,7 @@ async def test_high_priority_notice_on_cert_above_90(
     assert notice.related_type == "MATCH"
 
 
-async def test_no_high_priority_when_score_just_70(
+async def test_normal_priority_when_score_just_70(
     patch_session_factory, session: AsyncSession
 ) -> None:
     lost, _ = _seed_pair(session, category="CERT")
@@ -106,11 +106,13 @@ async def test_no_high_priority_when_score_just_70(
     written = await match_service.trigger_match("LOST", lost.id, ai_client=fake_client)
     assert written == 1
 
-    _, total = await _read_notices(session, lost.user_id)
-    assert total == 0
+    items, total = await _read_notices(session, lost.user_id)
+    assert total == 1
+    assert items[0].priority == "NORMAL"
+    assert items[0].related_type == "MATCH"
 
 
-async def test_no_high_priority_when_category_not_cert(
+async def test_normal_priority_when_category_not_cert(
     patch_session_factory, session: AsyncSession
 ) -> None:
     lost, _ = _seed_pair(session, category="ELECTRONIC")
@@ -128,5 +130,26 @@ async def test_no_high_priority_when_category_not_cert(
     written = await match_service.trigger_match("LOST", lost.id, ai_client=fake_client)
     assert written == 1
 
+    items, total = await _read_notices(session, lost.user_id)
+    assert total == 1
+    assert items[0].priority == "NORMAL"
+
+
+async def test_unsubscribed_lost_item_receives_no_match_notice(
+    patch_session_factory, session: AsyncSession
+) -> None:
+    lost, _ = _seed_pair(session, category="CERT")
+    lost.subscribe_match = 0
+    await session.commit()
+    fake_client = AsyncMock()
+    fake_client.calculate_match.return_value = {
+        "imageScore": 100,
+        "textScore": 100,
+        "locationScore": 100,
+        "timeScore": 100,
+        "totalScore": 100,
+    }
+
+    assert await match_service.trigger_match("LOST", lost.id, ai_client=fake_client) == 1
     _, total = await _read_notices(session, lost.user_id)
     assert total == 0

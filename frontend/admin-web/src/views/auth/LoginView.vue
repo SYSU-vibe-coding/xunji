@@ -28,22 +28,33 @@ const rules: FormRules = {
 const submitting = ref(false);
 
 async function submit() {
-  const valid = await formRef.value?.validate().catch(() => false);
-  if (!valid) return;
+  if (submitting.value) return;
   submitting.value = true;
   try {
+    const valid = await formRef.value?.validate().catch(() => false);
+    if (!valid) return;
     const data = await loginAdmin(form.account.trim(), form.password);
     if (data.user.role !== 'ADMIN') {
       ElMessage.warning('该账号不具备后台权限');
       return;
     }
     auth.setSession(data);
-    await auth.loadProfile();
+    try {
+      const profile = await auth.loadProfile();
+      if (profile?.role !== 'ADMIN') {
+        auth.clear();
+        ElMessage.warning('该账号不具备后台权限');
+        return;
+      }
+    } catch {
+      auth.clear();
+      throw new Error('账户信息加载失败，登录状态已回滚，请重试');
+    }
     ElMessage.success('登录成功');
     const redirect = (route.query.redirect as string) || '/dashboard';
     void router.push(redirect);
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '登录失败');
+    ElMessage.error(err instanceof ApiError || err instanceof Error ? err.message : '登录失败');
   } finally {
     submitting.value = false;
   }

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -8,6 +8,11 @@ from app.db.base import Base
 
 class Report(Base):
     __tablename__ = "reports"
+    __table_args__ = (
+        UniqueConstraint(
+            "reporter_id", "target_type", "target_id", name="uk_report_reporter_target"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(26), primary_key=True)
     reporter_id: Mapped[str] = mapped_column(String(26), nullable=False, index=True)

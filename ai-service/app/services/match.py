@@ -1,12 +1,13 @@
 """Lost↔Found matching. Embeddings for text similarity, rules for the rest.
 
 Falls back to keyword baseline (`_baseline.calculate_match`) on any failure.
-Image similarity intentionally skipped in DashScope path: enabling it would
-require multimodal-embedding which charges per call and isn't always
-available in the user's region. The rule-based image score is kept.
+Image similarity intentionally remains unavailable: image presence must never
+be presented as visual similarity when no image model is configured.
 """
 
 from __future__ import annotations
+
+from loguru import logger
 
 from app.clients.dashscope import DashScopeClient
 from app.schemas import CalculateMatchRequest, CalculateMatchResponse
@@ -26,21 +27,29 @@ async def calculate_match(
 
     # Use the high-level similarity scorer (chat-based or embedding-based
     # depending on which model env vars are set).
-    text_score = await client.text_similarity_score(
-        lost_text,
-        found_text,
-        lost_location=req.lost_item.location,
-        found_location=req.found_item.location,
-        lost_time=req.lost_item.time,
-        found_time=req.found_item.time,
-    )
+    try:
+        text_score = await client.text_similarity_score(lost_text, found_text)
+    except Exception:
+        logger.exception("[ai:50002] match text model failed unexpectedly")
+        return _baseline.calculate_match(req)
     if text_score is None:
         return _baseline.calculate_match(req)
 
-    image_score = _baseline.image_score_value(req.lost_item.image_urls, req.found_item.image_urls)
+    image_score = 0.0
     location_score = _baseline.location_score_value(req.lost_item.location, req.found_item.location)
-    time_score = _baseline.time_score_value(req.lost_item.time, req.found_item.time)
-    total = image_score * 0.4 + text_score * 0.3 + location_score * 0.2 + time_score * 0.1
+    time_score = _baseline.time_score_value(
+        req.lost_item.time,
+        req.found_item.time,
+        req.lost_item.time_end,
+    )
+    total = _baseline.normalized_total(
+        req,
+        image_score=image_score,
+        text_score=text_score,
+        location_score=location_score,
+        time_score=time_score,
+        image_available=False,
+    )
 
     return CalculateMatchResponse(
         image_score=round(image_score, 2),
@@ -48,6 +57,9 @@ async def calculate_match(
         location_score=round(location_score, 2),
         time_score=round(time_score, 2),
         total_score=round(total, 2),
+        image_available=False,
+        degraded=True,
+        score_source="TEXT_MODEL_RULES",
     )
 
 

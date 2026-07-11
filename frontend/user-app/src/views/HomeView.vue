@@ -7,7 +7,7 @@ import EmptyState from '@/components/EmptyState.vue';
 import ItemCard from '@/components/ItemCard.vue';
 import { listFoundItems } from '@/api/item';
 import { listNotifications } from '@/api/notification';
-import { isAuthApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notification';
 import type { FoundItemSummary, NotificationSummary } from '@xunji/shared';
@@ -20,7 +20,10 @@ const notice = useNotificationStore();
 
 const recentFound = ref<FoundItemSummary[]>([]);
 const recentNotifications = ref<NotificationSummary[]>([]);
-const loading = ref(true);
+const foundLoading = ref(true);
+const notificationLoading = ref(true);
+const foundError = ref('');
+const notificationError = ref('');
 
 const stats = computed(() => [
   { label: '信誉分', value: auth.profile?.creditScore ?? 0, suffix: '' },
@@ -28,22 +31,36 @@ const stats = computed(() => [
   { label: '招领待领取', value: recentFound.value.filter((it) => it.status === 'PENDING').length, suffix: '' },
 ]);
 
-async function load() {
-  loading.value = true;
+async function loadFound() {
+  foundLoading.value = true;
+  foundError.value = '';
   try {
-    const [foundPage, notiPage] = await Promise.all([
-      listFoundItems({ pageSize: 6, status: 'PENDING' }),
-      listNotifications({ pageSize: 4 }),
-    ]);
+    const foundPage = await listFoundItems({ pageSize: 6, status: 'PENDING' });
     recentFound.value = foundPage.list;
+  } catch (err) {
+    if (isAuthApiError(err)) return;
+    foundError.value = err instanceof ApiError ? err.message : '最新招领加载失败';
+  } finally {
+    foundLoading.value = false;
+  }
+}
+
+async function loadNotifications() {
+  notificationLoading.value = true;
+  notificationError.value = '';
+  try {
+    const notiPage = await listNotifications({ pageSize: 4 });
     recentNotifications.value = notiPage.list;
   } catch (err) {
-    if (!isAuthApiError(err)) {
-      // 静默：登录失效会被守卫接管
-    }
+    if (isAuthApiError(err)) return;
+    notificationError.value = err instanceof ApiError ? err.message : '消息提醒加载失败';
   } finally {
-    loading.value = false;
+    notificationLoading.value = false;
   }
+}
+
+async function load() {
+  await Promise.allSettled([loadFound(), loadNotifications()]);
 }
 
 function openItem(id: string) {
@@ -115,8 +132,23 @@ onMounted(load);
         </div>
         <el-button link type="primary" @click="router.push('/search')">查看全部</el-button>
       </header>
-      <el-skeleton v-if="loading" :rows="3" animated />
-      <div v-else-if="recentFound.length" class="grid">
+       <el-skeleton v-if="foundLoading && !recentFound.length" :rows="3" animated />
+       <EmptyState
+         v-else-if="foundError && !recentFound.length"
+         title="最新招领加载失败"
+         :description="foundError"
+         action-text="重试"
+         @action="loadFound"
+       />
+       <el-alert
+         v-else-if="foundError"
+         type="warning"
+         :closable="false"
+         :title="`${foundError}，当前保留上次成功结果`"
+       >
+         <template #default><el-button link type="primary" @click="loadFound">重试</el-button></template>
+       </el-alert>
+       <div v-if="recentFound.length" v-loading="foundLoading" class="grid">
         <ItemCard
           v-for="item in recentFound.slice(0, 6)"
           :key="item.id"
@@ -125,8 +157,8 @@ onMounted(load);
           @open="openItem"
         />
       </div>
-      <EmptyState
-        v-else
+       <EmptyState
+         v-else-if="!foundError && !foundLoading"
         title="暂无招领信息"
         description="成为第一个登记招领的同学吧"
         action-text="去登记"
@@ -143,6 +175,22 @@ onMounted(load);
         <el-button link type="primary" @click="router.push('/notifications')">全部消息</el-button>
       </header>
       <el-card shadow="never" class="notice-card">
+        <el-skeleton v-if="notificationLoading && !recentNotifications.length" :rows="3" animated />
+        <EmptyState
+          v-else-if="notificationError && !recentNotifications.length"
+          title="消息提醒加载失败"
+          :description="notificationError"
+          action-text="重试"
+          @action="loadNotifications"
+        />
+        <el-alert
+          v-else-if="notificationError"
+          type="warning"
+          :closable="false"
+          :title="`${notificationError}，当前保留上次成功结果`"
+        >
+          <template #default><el-button link type="primary" @click="loadNotifications">重试</el-button></template>
+        </el-alert>
         <template v-if="recentNotifications.length">
           <div
             v-for="n in recentNotifications"
@@ -160,7 +208,7 @@ onMounted(load);
             <el-tag v-if="!n.isRead" size="small" type="primary">未读</el-tag>
           </div>
         </template>
-        <EmptyState v-else title="暂无消息提醒" />
+        <EmptyState v-else-if="!notificationError && !notificationLoading" title="暂无消息提醒" />
       </el-card>
     </section>
   </div>

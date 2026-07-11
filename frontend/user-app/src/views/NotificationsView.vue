@@ -15,6 +15,7 @@ import { useNotificationStore } from '@/stores/notification';
 import type { NotificationSummary } from '@xunji/shared';
 import { noticeTypeLabels } from '@xunji/shared';
 import { relativeTime } from '@/utils/format';
+import { getNotificationTarget } from '@/utils/interaction';
 
 const router = useRouter();
 const noticeStore = useNotificationStore();
@@ -24,9 +25,11 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 const loading = ref(true);
+const loadError = ref('');
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     const data = await listNotifications({ pageNo: page.value, pageSize });
     list.value = data.list;
@@ -34,6 +37,8 @@ async function load() {
   } catch (err) {
     if (isAuthApiError(err)) return;
     list.value = [];
+    total.value = 0;
+    loadError.value = err instanceof ApiError ? err.message : '消息加载失败，请稍后重试';
   } finally {
     loading.value = false;
   }
@@ -49,13 +54,8 @@ async function handleClick(item: NotificationSummary) {
       /* ignore */
     }
   }
-  if (item.relatedType === 'CLAIM' && item.relatedId) {
-    void router.push(`/claims/${item.relatedId}`);
-  } else if (item.relatedType === 'FOUND' && item.relatedId) {
-    void router.push(`/items/found/${item.relatedId}`);
-  } else if (item.relatedType === 'LOST' && item.relatedId) {
-    void router.push(`/items/lost/${item.relatedId}`);
-  }
+  const target = getNotificationTarget(item.relatedType, item.relatedId);
+  if (target) void router.push(target);
 }
 
 async function handleMarkAll() {
@@ -87,7 +87,14 @@ onMounted(load);
 
     <el-skeleton v-if="loading" :rows="4" animated />
     <template v-else>
-      <el-card v-if="list.length" shadow="never" :body-style="{ padding: 0 }">
+      <EmptyState
+        v-if="loadError"
+        title="消息加载失败"
+        :description="loadError"
+        action-text="重试"
+        @action="load"
+      />
+      <el-card v-else-if="list.length" shadow="never" :body-style="{ padding: 0 }">
         <div
           v-for="n in list"
           :key="n.id"

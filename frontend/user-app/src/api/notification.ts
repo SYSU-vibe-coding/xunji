@@ -1,4 +1,6 @@
 import type {
+  AnnouncementDetail,
+  AnnouncementSummary,
   NotificationQuery,
   NotificationSummary,
   PageData,
@@ -25,4 +27,15 @@ export function markNotificationRead(id: string) {
 
 export function markAllNotificationsRead(payload: ReadAllRequest = {}) {
   return http.post<{ updated: number }>('/notifications/read-all', payload);
+}
+
+export function listAnnouncements(query: { pageNo?: number; pageSize?: number } = {}) {
+  return http.get<PageData<AnnouncementSummary>>(
+    '/announcements',
+    query as Record<string, unknown>,
+  );
+}
+
+export function getAnnouncement(id: string) {
+  return http.get<AnnouncementDetail>(`/announcements/${id}`);
 }

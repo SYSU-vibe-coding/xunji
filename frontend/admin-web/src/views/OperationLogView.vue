@@ -1,47 +1,76 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Document } from '@element-plus/icons-vue';
 
 import { listOperationLogs } from '@/api/admin';
-import { isAuthApiError } from '@/api/http';
+import { ApiError, isUnauthorizedApiError } from '@/api/http';
 import StatusTag from '@/components/StatusTag.vue';
 import type { OperationLogRecord } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
+import {
+  createLatestRequestGuard,
+  lastPage,
+  queryEnum,
+  queryPositiveInt,
+  queryValue,
+} from '@/utils/admin-list';
 
-const BIZ_TYPES = ['LOST', 'FOUND', 'CLAIM', 'CREDIT', 'CERTIFICATION', 'REPORT', 'ANNOUNCEMENT', 'USER', 'MATCH'];
+const BIZ_TYPES = ['LOST', 'FOUND', 'CLAIM', 'CERT', 'REPORT', 'ANNOUNCEMENT', 'USER', 'MATCH'] as const;
 const ACTIONS = [
   'CREATE',
   'UPDATE',
   'UPDATE_STATUS',
   'DELETE',
-  'APPROVE',
-  'REJECT',
-  'HANDOVER',
-  'CONFIRM',
-  'PUBLISH',
-  'VALID',
-  'INVALID',
+  'REVIEW_APPROVE',
+  'REVIEW_REJECT',
+  'HANDOVER_CONFIRM',
+  'CREDIT_CHANGE',
+  'REPORT_HANDLE',
+  'CERT_APPROVE',
+  'CERT_REJECT',
   'RUN',
-  'SUBMIT',
-  'REVIEW',
-];
-const ROLES = ['USER', 'ADMIN'];
+] as const;
+const ROLES = ['USER', 'ADMIN'] as const;
+
+const route = useRoute();
+const router = useRouter();
+const requestGuard = createLatestRequestGuard();
 
 const list = ref<OperationLogRecord[]>([]);
 const total = ref(0);
-const loading = ref(false);
-const pageNo = ref(1);
-const pageSize = ref(20);
+const loading = ref(true);
+const errorMessage = ref('');
+const pageNo = ref(queryPositiveInt(route.query.page));
+const pageSize = ref(queryEnum(route.query.pageSize, ['20', '50', '100'] as const)
+  ? Number(queryValue(route.query.pageSize))
+  : 20);
 const filters = ref({
-  bizType: '' as string,
-  action: '' as string,
-  operatorRole: '' as string,
-  keyword: '' as string,
+  bizType: queryEnum(route.query.bizType, BIZ_TYPES) as string,
+  action: queryEnum(route.query.action, ACTIONS) as string,
+  operatorRole: queryEnum(route.query.operatorRole, ROLES) as string,
+  keyword: queryValue(route.query.keyword),
 });
 
+function currentQuery() {
+  return {
+    ...(filters.value.bizType ? { bizType: filters.value.bizType } : {}),
+    ...(filters.value.action ? { action: filters.value.action } : {}),
+    ...(filters.value.operatorRole ? { operatorRole: filters.value.operatorRole } : {}),
+    ...(filters.value.keyword.trim() ? { keyword: filters.value.keyword.trim() } : {}),
+    ...(pageNo.value > 1 ? { page: String(pageNo.value) } : {}),
+    ...(pageSize.value !== 20 ? { pageSize: String(pageSize.value) } : {}),
+  };
+}
+
+async function syncUrl() {
+  await router.replace({ query: currentQuery() });
+}
+
 async function load() {
+  const requestId = requestGuard.next();
   loading.value = true;
+  errorMessage.value = '';
   try {
     const params: Record<string, unknown> = {
       pageNo: pageNo.value,
@@ -52,36 +81,78 @@ async function load() {
     if (filters.value.operatorRole) params.operatorRole = filters.value.operatorRole;
     if (filters.value.keyword) params.keyword = filters.value.keyword;
     const data = await listOperationLogs(params);
+    if (!requestGuard.isLatest(requestId)) return;
+    const finalPage = lastPage(data.total, pageSize.value);
+    if (pageNo.value > finalPage) {
+      pageNo.value = finalPage;
+      await syncUrl();
+      if (requestGuard.isLatest(requestId)) void load();
+      return;
+    }
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
-    if (!isAuthApiError(err)) ElMessage.error('加载操作日志失败');
+    if (!requestGuard.isLatest(requestId) || isUnauthorizedApiError(err)) return;
+    list.value = [];
+    total.value = 0;
+    errorMessage.value = err instanceof ApiError ? err.message : '操作日志加载失败';
   } finally {
-    loading.value = false;
+    if (requestGuard.isLatest(requestId)) loading.value = false;
   }
+}
+
+async function refresh() {
+  await syncUrl();
+  await load();
 }
 
 function applyFilters() {
   pageNo.value = 1;
-  load();
+  void refresh();
 }
 
 function resetFilters() {
   filters.value = { bizType: '', action: '', operatorRole: '', keyword: '' };
   pageNo.value = 1;
-  load();
+  void refresh();
 }
 
 function onPageChange(p: number) {
   pageNo.value = p;
-  load();
+  void refresh();
 }
 
 function onSizeChange(s: number) {
   pageSize.value = s;
   pageNo.value = 1;
-  load();
+  void refresh();
 }
+
+watch(
+  () => route.query,
+  (query) => {
+    const nextPage = queryPositiveInt(query.page);
+    const nextPageSizeValue = queryEnum(query.pageSize, ['20', '50', '100'] as const);
+    const nextPageSize = nextPageSizeValue ? Number(nextPageSizeValue) : 20;
+    const nextFilters = {
+      bizType: queryEnum(query.bizType, BIZ_TYPES) as string,
+      action: queryEnum(query.action, ACTIONS) as string,
+      operatorRole: queryEnum(query.operatorRole, ROLES) as string,
+      keyword: queryValue(query.keyword),
+    };
+    if (
+      nextPage === pageNo.value &&
+      nextPageSize === pageSize.value &&
+      Object.entries(nextFilters).every(
+        ([key, value]) => filters.value[key as keyof typeof filters.value] === value,
+      )
+    ) return;
+    pageNo.value = nextPage;
+    pageSize.value = nextPageSize;
+    filters.value = nextFilters;
+    void load();
+  },
+);
 
 onMounted(load);
 </script>
@@ -115,11 +186,14 @@ onMounted(load);
           />
           <el-button type="primary" @click="applyFilters">筛选</el-button>
           <el-button @click="resetFilters">重置</el-button>
-          <el-button @click="load">刷新</el-button>
+          <el-button :loading="loading" @click="refresh">刷新</el-button>
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="list" stripe style="width: 100%">
+      <el-result v-if="errorMessage" icon="error" title="操作日志加载失败" :sub-title="errorMessage">
+        <template #extra><el-button type="primary" @click="load">重试</el-button></template>
+      </el-result>
+      <el-table v-else-if="loading || list.length" v-loading="loading" :data="list" stripe style="width: 100%">
         <el-table-column prop="createdAt" label="时间" width="160">
           <template #default="{ row }">{{ shortDateTime(row.createdAt) }}</template>
         </el-table-column>
@@ -150,8 +224,9 @@ onMounted(load);
           </template>
         </el-table-column>
       </el-table>
+      <el-empty v-else description="当前筛选条件下没有操作日志" />
 
-      <div class="pager">
+      <div v-if="total > 0" class="pager">
         <el-pagination
           background
           layout="total, sizes, prev, pager, next"

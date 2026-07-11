@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Lock, Picture as PictureIcon } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
+import EmptyState from '@/components/EmptyState.vue';
 import ImageUploader from '@/components/ImageUploader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import {
@@ -22,8 +23,10 @@ import {
   custodyTypeLabels,
   type FoundItemDetail,
   type LostItemDetail,
+  isConflictApiError,
 } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
+import { buildClaimAnswers } from '@/utils/interaction';
 
 const route = useRoute();
 const router = useRouter();
@@ -35,10 +38,15 @@ const id = computed(() => route.params.id as string);
 const foundDetail = ref<FoundItemDetail | null>(null);
 const lostDetail = ref<LostItemDetail | null>(null);
 const loading = ref(true);
+const loadError = ref('');
+const deleting = ref(false);
+const statusChanging = ref(false);
 
 const claimDialog = ref(false);
 const claimAnswers = reactive<Record<string, string>>({});
 const claimProofImageUrls = ref<string[]>([]);
+const claimProofUploading = ref(false);
+const claimProofUploadError = ref<string | null>(null);
 const claimSubmitting = ref(false);
 const reportDialog = ref(false);
 const reportForm = reactive({ reason: '', description: '' });
@@ -51,11 +59,19 @@ const isOwner = computed(() => detail.value?.userId === auth.profile?.id);
 const itemName = computed(() => detail.value?.itemName ?? '物品详情');
 const images = computed(() => detail.value?.imageUrls ?? []);
 const cover = computed(() => images.value[0] ?? null);
+const canClaim = computed(() => Boolean(
+  foundDetail.value &&
+  !isOwner.value &&
+  foundDetail.value.status === 'PENDING' &&
+  foundDetail.value.reviewStatus === 'APPROVED' &&
+  !foundDetail.value.hasActiveClaim,
+));
 
 async function load() {
   loading.value = true;
   foundDetail.value = null;
   lostDetail.value = null;
+  loadError.value = '';
   try {
     if (isFound.value) {
       foundDetail.value = await getFoundItem(id.value);
@@ -66,7 +82,7 @@ async function load() {
       lostDetail.value = await getLostItem(id.value);
     }
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '加载失败');
+    loadError.value = err instanceof ApiError ? err.message : '加载失败，请稍后重试';
   } finally {
     loading.value = false;
   }
@@ -76,35 +92,51 @@ watch(() => route.fullPath, load);
 onMounted(load);
 
 async function handleDelete() {
-  if (!lostDetail.value) return;
+  if (deleting.value || !lostDetail.value) return;
   try {
     await ElMessageBox.confirm('确认删除这条失物信息吗？', '删除确认', { type: 'warning' });
   } catch {
     return;
   }
+  deleting.value = true;
   try {
     await deleteLostItem(lostDetail.value.id);
     ElMessage.success('已删除');
     void router.push('/profile/items');
   } catch (err) {
+    if (isConflictApiError(err)) {
+      ElMessage.warning('物品状态已变化，已刷新最新详情');
+      await load();
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '删除失败');
+  } finally {
+    deleting.value = false;
   }
 }
 
 async function changeLostStatus(status: 'FOUND' | 'CLOSED') {
-  if (!lostDetail.value) return;
+  if (statusChanging.value || !lostDetail.value) return;
   const label = status === 'FOUND' ? '标记为已找回' : '关闭';
   try {
     await ElMessageBox.confirm(`确认${label}这条失物信息吗？`, label, { type: 'warning' });
   } catch {
     return;
   }
+  statusChanging.value = true;
   try {
     await changeLostItemStatus(lostDetail.value.id, { status });
     ElMessage.success('状态已更新');
     await load();
   } catch (err) {
+    if (isConflictApiError(err)) {
+      ElMessage.warning('物品状态已变化，已关闭旧操作并刷新详情');
+      await load();
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '状态更新失败');
+  } finally {
+    statusChanging.value = false;
   }
 }
 
@@ -114,15 +146,39 @@ function openClaim() {
     ElMessage.warning('不能认领自己发布的招领');
     return;
   }
+  if (foundDetail.value.hasActiveClaim) {
+    ElMessage.warning('该物品已有进行中的认领');
+    return;
+  }
+  if (foundDetail.value.reviewStatus !== 'APPROVED') {
+    ElMessage.warning('该招领尚未通过审核，暂不可认领');
+    return;
+  }
+  Object.keys(claimAnswers).forEach((key) => delete claimAnswers[key]);
+  foundDetail.value.verifyQuestions.forEach((q) => {
+    claimAnswers[q.id] = '';
+  });
   claimProofImageUrls.value = [];
+  claimProofUploading.value = false;
+  claimProofUploadError.value = null;
   claimDialog.value = true;
 }
 
 async function submitClaim() {
-  if (!foundDetail.value) return;
-  const answers = foundDetail.value.verifyQuestions
-    .map((q) => ({ questionId: q.id, answerText: (claimAnswers[q.id] ?? '').trim() }))
-    .filter((a) => a.answerText);
+  if (claimSubmitting.value || !foundDetail.value) return;
+  const answers = buildClaimAnswers(foundDetail.value.verifyQuestions, claimAnswers);
+  if (!answers) {
+    ElMessage.warning('请回答全部验证问题');
+    return;
+  }
+  if (claimProofUploading.value) {
+    ElMessage.warning('图片仍在上传，请稍候');
+    return;
+  }
+  if (claimProofUploadError.value) {
+    ElMessage.warning('有图片上传失败，请移除后重试');
+    return;
+  }
   claimSubmitting.value = true;
   try {
     const result = await createClaim({
@@ -135,6 +191,12 @@ async function submitClaim() {
     claimDialog.value = false;
     void router.push(`/claims/${result.id}`);
   } catch (err) {
+    if (isConflictApiError(err)) {
+      claimDialog.value = false;
+      ElMessage.warning('认领状态已变化，已关闭旧操作并刷新详情');
+      await load();
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '提交失败');
   } finally {
     claimSubmitting.value = false;
@@ -167,6 +229,12 @@ async function submitReport() {
     ElMessage.success('举报已提交');
     reportDialog.value = false;
   } catch (err) {
+    if (isConflictApiError(err)) {
+      reportDialog.value = false;
+      ElMessage.warning('举报或目标状态已变化，已关闭旧操作并刷新详情');
+      await load();
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '提交举报失败');
   } finally {
     reportSubmitting.value = false;
@@ -178,6 +246,19 @@ function goMatches() {
   void router.push({
     name: 'matches',
     query: { bizType: backendBizType.value, bizId: detail.value.id },
+  });
+}
+
+function goManage() {
+  if (!detail.value) return;
+  void router.push({
+    name: 'my-items',
+    query: {
+      tab: isFound.value ? 'found' : 'lost',
+      page: '1',
+      bizType: backendBizType.value,
+      id: detail.value.id,
+    },
   });
 }
 </script>
@@ -207,6 +288,7 @@ function goMatches() {
             <div class="badges">
               <el-tag round effect="dark">{{ categoryLabels[detail.category] }}</el-tag>
               <StatusTag :variant="bizType" :value="detail.status" />
+              <StatusTag variant="review" :value="detail.reviewStatus" />
             </div>
             <h1>{{ detail.itemName }}</h1>
             <p class="desc">{{ detail.description || '发布者未填写描述' }}</p>
@@ -229,27 +311,33 @@ function goMatches() {
                 <el-descriptions-item v-if="isOwner" label="匹配数">{{ lostDetail!.matchCount ?? 0 }}</el-descriptions-item>
               </template>
               <el-descriptions-item label="发布时间">{{ shortDateTime(detail.createdAt) }}</el-descriptions-item>
+              <el-descriptions-item label="审核状态">
+                <StatusTag variant="review" :value="detail.reviewStatus" />
+              </el-descriptions-item>
+              <el-descriptions-item label="审核意见">{{ detail.reviewComment || '暂无' }}</el-descriptions-item>
             </el-descriptions>
 
             <div class="actions">
               <el-button v-if="isOwner" @click="goMatches">查看匹配</el-button>
               <el-button v-else plain @click="openReport">举报</el-button>
               <template v-if="isFound">
+                <el-button v-if="isOwner" type="primary" @click="goManage">管理 / 编辑发布</el-button>
                 <el-button
                   type="primary"
                   size="large"
-                  :disabled="isOwner || foundDetail!.status !== 'PENDING'"
+                  v-if="canClaim"
                   @click="openClaim"
                 >
                   发起认领
                 </el-button>
               </template>
               <template v-else-if="isOwner">
-                <el-button @click="router.push('/profile/items')">编辑</el-button>
+                <el-button @click="goManage">管理 / 编辑发布</el-button>
                 <el-button
                   type="success"
                   plain
                   :disabled="lostDetail!.status !== 'SEARCHING'"
+                  :loading="statusChanging"
                   @click="changeLostStatus('FOUND')"
                 >
                   标记已找回
@@ -258,11 +346,12 @@ function goMatches() {
                   type="warning"
                   plain
                   :disabled="lostDetail!.status !== 'SEARCHING'"
+                  :loading="statusChanging"
                   @click="changeLostStatus('CLOSED')"
                 >
                   关闭
                 </el-button>
-                <el-button type="danger" plain @click="handleDelete">删除</el-button>
+                <el-button type="danger" plain :loading="deleting" @click="handleDelete">删除</el-button>
               </template>
             </div>
           </div>
@@ -270,6 +359,13 @@ function goMatches() {
       </el-card>
     </template>
 
+    <EmptyState
+      v-else-if="loadError"
+      title="物品详情加载失败"
+      :description="loadError"
+      action-text="重试"
+      @action="load"
+    />
     <el-empty v-else description="物品不存在或已下架" />
 
     <!-- 认领对话框 -->
@@ -301,12 +397,23 @@ function goMatches() {
       />
       <el-form label-position="top" class="proof-form">
         <el-form-item label="凭证图片">
-          <ImageUploader v-model="claimProofImageUrls" biz-type="CLAIM_PROOF" :max="5" />
+          <ImageUploader
+            v-model="claimProofImageUrls"
+            biz-type="CLAIM_PROOF"
+            :max="5"
+            @uploading-change="claimProofUploading = $event"
+            @error-change="claimProofUploadError = $event"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="claimDialog = false">取消</el-button>
-        <el-button type="primary" :loading="claimSubmitting" @click="submitClaim">
+        <el-button :disabled="claimSubmitting" @click="claimDialog = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="claimSubmitting"
+          :disabled="claimProofUploading || Boolean(claimProofUploadError)"
+          @click="submitClaim"
+        >
           提交认领
         </el-button>
       </template>
@@ -442,6 +549,15 @@ function goMatches() {
   }
   .media {
     min-height: 220px;
+  }
+
+  .info .actions {
+    flex-direction: column;
+
+    .el-button {
+      width: 100%;
+      margin-left: 0;
+    }
   }
 }
 </style>

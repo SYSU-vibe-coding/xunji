@@ -1,4 +1,17 @@
+import pytest
+from app.core.config import settings
 from httpx import AsyncClient
+
+
+@pytest.fixture(autouse=True)
+def _enable_debug_sms(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(settings, "SMS_DEBUG_ENABLED", True)
+    monkeypatch.setattr(
+        settings,
+        "SMS_DEMO_PHONES",
+        ",".join(f"139000000{suffix:02d}" for suffix in range(10, 24)),
+    )
 
 
 async def _login_and_get_headers(client: AsyncClient, phone: str) -> dict[str, str]:

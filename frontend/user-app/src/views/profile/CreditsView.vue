@@ -5,7 +5,7 @@ import { Trophy } from '@element-plus/icons-vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { listMyCreditLogs } from '@/api/credit';
-import { isAuthApiError } from '@/api/http';
+import { ApiError, isAuthApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
 import type { CreditLogItem } from '@xunji/shared';
 import { creditReasonLabels } from '@xunji/shared';
@@ -17,16 +17,18 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 const loading = ref(true);
+const loadError = ref('');
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     const data = await listMyCreditLogs({ pageNo: page.value, pageSize });
     list.value = data.list;
     total.value = data.total;
   } catch (err) {
     if (isAuthApiError(err)) return;
-    list.value = [];
+    loadError.value = err instanceof ApiError ? err.message : '积分流水加载失败';
   } finally {
     loading.value = false;
   }
@@ -54,9 +56,24 @@ onMounted(load);
       </div>
     </el-card>
 
-    <el-skeleton v-if="loading" :rows="3" animated />
+    <el-skeleton v-if="loading && !list.length" :rows="3" animated />
     <template v-else>
-      <el-table v-if="list.length" :data="list" stripe border style="width: 100%">
+      <EmptyState
+        v-if="loadError && !list.length"
+        title="积分流水加载失败"
+        :description="loadError"
+        action-text="重试"
+        @action="load"
+      />
+      <el-alert
+        v-else-if="loadError"
+        type="warning"
+        :closable="false"
+        :title="`${loadError}，当前保留上次成功结果`"
+      >
+        <template #default><el-button link type="primary" @click="load">重试</el-button></template>
+      </el-alert>
+      <el-table v-if="list.length" v-loading="loading" :data="list" stripe border style="width: 100%">
         <el-table-column prop="createdAt" label="时间" width="180">
           <template #default="{ row }">{{ shortDateTime(row.createdAt) }}</template>
         </el-table-column>
@@ -75,7 +92,11 @@ onMounted(load);
         </el-table-column>
         <el-table-column prop="bizType" label="业务" width="100" />
       </el-table>
-      <EmptyState v-else title="暂无积分变动" description="完成认领、交接等操作后将自动产生积分流水" />
+      <EmptyState
+        v-else-if="!loadError"
+        title="暂无积分变动"
+        description="完成认领、交接等操作后将自动产生积分流水"
+      />
 
       <el-pagination
         v-if="total > pageSize"

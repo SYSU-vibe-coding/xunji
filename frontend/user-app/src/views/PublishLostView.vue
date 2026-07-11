@@ -46,8 +46,19 @@ const rules: FormRules = {
 };
 
 const submitting = ref(false);
+const imageUploading = ref(false);
+const imageUploadError = ref<string | null>(null);
 
 async function submit() {
+  if (submitting.value) return;
+  if (imageUploading.value) {
+    ElMessage.warning('图片仍在上传，请稍候');
+    return;
+  }
+  if (imageUploadError.value) {
+    ElMessage.warning('有图片上传失败，请移除后重试');
+    return;
+  }
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
   submitting.value = true;
@@ -128,7 +139,13 @@ async function submit() {
             />
           </el-form-item>
           <el-form-item label="物品图片（最多 5 张）" class="span-2">
-            <ImageUploader v-model="form.imageUrls" biz-type="LOST" :max="5" />
+            <ImageUploader
+              v-model="form.imageUrls"
+              biz-type="LOST"
+              :max="5"
+              @uploading-change="imageUploading = $event"
+              @error-change="imageUploadError = $event"
+            />
           </el-form-item>
           <el-form-item class="span-2">
             <el-checkbox v-model="form.subscribeMatch">
@@ -139,7 +156,13 @@ async function submit() {
 
         <div class="footer-actions">
           <el-button @click="router.push('/')">取消</el-button>
-          <el-button type="primary" size="large" :loading="submitting" @click="submit">
+          <el-button
+            type="primary"
+            size="large"
+            :loading="submitting"
+            :disabled="imageUploading || Boolean(imageUploadError)"
+            @click="submit"
+          >
             发布失物
           </el-button>
         </div>

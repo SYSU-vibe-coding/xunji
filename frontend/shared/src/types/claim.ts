@@ -45,7 +45,7 @@ export interface ClaimAnswerOutput {
   questionId: string;
   questionText: string;
   answerText: string;
-  matchScore: number;
+  matchScore: number | null;
 }
 
 export interface HandoverDetail {
@@ -67,6 +67,7 @@ export interface ClaimDetail {
   verifyLevel: VerifyLevel;
   reviewStatus: ClaimReviewStatus;
   rejectReason: string | null;
+  appealReason: string | null;
   answers: ClaimAnswerOutput[];
   proofImageUrls: string[];
   proofText: string | null;

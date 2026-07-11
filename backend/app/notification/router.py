@@ -13,6 +13,26 @@ from app.user.schemas import CurrentUser
 router = APIRouter(tags=["notifications"])
 
 
+@router.get("/announcements")
+async def list_announcements(
+    page_no: int = Query(default=1, ge=1, alias="pageNo"),
+    page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
+    svc: NotificationService = Depends(get_notification_service),
+) -> dict[str, Any]:
+    data = await svc.list_announcements(page_no=page_no, page_size=page_size)
+    return success(data=data)
+
+
+@router.get("/announcements/{announcement_id}")
+async def get_announcement(
+    announcement_id: str,
+    svc: NotificationService = Depends(get_notification_service),
+) -> dict[str, Any]:
+    announcement_id = validate_ulid(announcement_id, "announcementId")
+    data = await svc.get_announcement(announcement_id)
+    return success(data=data.model_dump(by_alias=True))
+
+
 @router.get("/notifications")
 async def list_notifications(
     page_no: int = Query(default=1, ge=1, alias="pageNo"),

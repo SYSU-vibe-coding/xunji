@@ -40,7 +40,13 @@ def classify_item(req: ClassifyItemRequest) -> ClassifyItemResponse:
             best_hits = len(hits)
             tags = hits[:10]
     confidence = min(100.0, 50.0 + best_hits * 20.0) if best_hits else 50.0
-    return ClassifyItemResponse(category=best_category, tags=tags, confidence=confidence)
+    return ClassifyItemResponse(
+        category=best_category,
+        tags=tags,
+        confidence=confidence,
+        degraded=True,
+        source="KEYWORD_RULES",
+    )
 
 
 def detect_sensitive(req: DetectSensitiveRequest) -> DetectSensitiveResponse:
@@ -57,28 +63,46 @@ def detect_sensitive(req: DetectSensitiveRequest) -> DetectSensitiveResponse:
         else:
             sensitive_type = "OTHER"
     return DetectSensitiveResponse(
-        is_sensitive=is_sensitive,
+        # A filename-only baseline cannot prove an image is safe. Treat model
+        # unavailability as sensitive until a reviewer can inspect it.
+        is_sensitive=True,
         sensitive_type=sensitive_type,
-        masked_image_url=f"{req.image_url}?masked=1" if is_sensitive else None,
+        masked_image_url=None,
         recognized_fields=None,
+        degraded=True,
+        needs_review=True,
     )
 
 
 def calculate_match(req: CalculateMatchRequest) -> CalculateMatchResponse:
-    image_score = image_score_value(req.lost_item.image_urls, req.found_item.image_urls)
+    image_score = 0.0
     text_score = keyword_overlap(
         [req.lost_item.name, req.lost_item.description],
         [req.found_item.name, req.found_item.description],
     )
     location_score = location_score_value(req.lost_item.location, req.found_item.location)
-    time_score = time_score_value(req.lost_item.time, req.found_item.time)
-    total_score = image_score * 0.4 + text_score * 0.3 + location_score * 0.2 + time_score * 0.1
+    time_score = time_score_value(
+        req.lost_item.time,
+        req.found_item.time,
+        req.lost_item.time_end,
+    )
+    total_score = normalized_total(
+        req,
+        image_score=image_score,
+        text_score=text_score,
+        location_score=location_score,
+        time_score=time_score,
+        image_available=False,
+    )
     return CalculateMatchResponse(
         image_score=round(image_score, 2),
         text_score=round(text_score, 2),
         location_score=round(location_score, 2),
         time_score=round(time_score, 2),
         total_score=round(total_score, 2),
+        image_available=False,
+        degraded=True,
+        score_source="RULE_BASED",
     )
 
 
@@ -112,39 +136,77 @@ def location_score_value(left: str | None, right: str | None) -> float:
 
 
 def image_score_value(left: list[str] | None, right: list[str] | None) -> float:
-    # Without a real image-similarity model we can't compare visual content.
-    # Returning 0 when images are missing is too punishing (image has weight
-    # 0.4 and would cap total at 60). Use neutral scores instead:
-    #   both have images  -> 60 (encourage uploading, but rule can't measure)
-    #   one side only     -> 50 (neutral, can't compare)
-    #   neither           -> 50 (neutral)
-    if left and right:
-        return 60.0
-    return 50.0
+    # Presence is not visual similarity. Until an image model is configured,
+    # this dimension is explicitly unavailable and contributes no score.
+    return 0.0
 
 
-def time_score_value(left: str | None, right: str | None) -> float:
-    """Time proximity. ``max(0, 100 - days_diff * 2)`` — within a week still
-    scores 86, beyond ~50 days drops to 0. Looser than the original
-    ``hours * 2`` formula because lost/found events may legitimately be
-    reported days apart.
-    """
-    if not left or not right:
+def time_score_value(
+    lost_start: str | None,
+    found_time: str | None,
+    lost_end: str | None = None,
+) -> float:
+    """Decay by the minimum hour distance from the lost interval to found time."""
+    if not lost_start or not found_time:
         return 0.0
     from datetime import datetime
 
-    parsed = []
-    for raw in (left, right):
+    parsed: list[datetime] = []
+    for raw in (lost_start, lost_end or lost_start, found_time):
         try:
             parsed.append(datetime.fromisoformat(raw.replace("Z", "+00:00")))
         except ValueError:
-            return 50.0  # both present but unparseable → neutral fallback
-    delta_days = abs((parsed[0] - parsed[1]).total_seconds()) / 86400.0
-    return max(0.0, 100.0 - delta_days * 2.0)
+            return 0.0
+    start, end, found = parsed
+    try:
+        if end < start:
+            return 0.0
+        if found < start:
+            delta_hours = (start - found).total_seconds() / 3600.0
+        elif found > end:
+            delta_hours = (found - end).total_seconds() / 3600.0
+        else:
+            delta_hours = 0.0
+    except TypeError:
+        return 0.0
+    return max(0.0, 100.0 - delta_hours * 2.0)
+
+
+def normalized_total(
+    req: CalculateMatchRequest,
+    *,
+    image_score: float,
+    text_score: float,
+    location_score: float,
+    time_score: float,
+    image_available: bool,
+) -> float:
+    """Normalize over dimensions that have both input signals and a real scorer."""
+    weighted = 0.0
+    available_weight = 0.0
+    if image_available:
+        weighted += image_score * 0.4
+        available_weight += 0.4
+    if _has_text(req.lost_item.name, req.lost_item.description) and _has_text(
+        req.found_item.name, req.found_item.description
+    ):
+        weighted += text_score * 0.3
+        available_weight += 0.3
+    if req.lost_item.location and req.found_item.location:
+        weighted += location_score * 0.2
+        available_weight += 0.2
+    if req.lost_item.time and req.found_item.time:
+        weighted += time_score * 0.1
+        available_weight += 0.1
+    return weighted / available_weight if available_weight else 0.0
 
 
 def _combined_text(values: Iterable[str | None]) -> str:
     return " ".join(value for value in values if value).lower()
+
+
+def _has_text(name: str | None, description: str | None) -> bool:
+    return bool((name and name.strip()) or (description and description.strip()))
 
 
 def _tokens(values: Iterable[str | None]) -> set[str]:

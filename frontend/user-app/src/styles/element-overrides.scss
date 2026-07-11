@@ -52,3 +52,30 @@
   --el-border-radius-base: 10px;
   --el-border-radius-small: 6px;
 }
+
+@media (max-width: 720px) {
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px);
+    margin: 12px auto !important;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .el-dialog__body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .el-dialog__footer {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+
+    .el-button {
+      width: 100%;
+      min-height: 40px;
+      margin-left: 0 !important;
+    }
+  }
+}

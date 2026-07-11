@@ -24,6 +24,11 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from app.clients.image_fetcher import (
+    ImageDownloadError,
+    ImageFetcher,
+    ImageHostResolver,
+)
 from app.core.config import settings
 
 
@@ -37,6 +42,8 @@ class DashScopeClient:
         base_url: str | None = None,
         timeout: float | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        image_transport: httpx.AsyncBaseTransport | None = None,
+        image_resolver: ImageHostResolver | None = None,
     ) -> None:
         self._api_key = api_key if api_key is not None else settings.DASHSCOPE_API_KEY
         self._base_url = (base_url or settings.DASHSCOPE_BASE_URL).rstrip("/")
@@ -54,9 +61,14 @@ class DashScopeClient:
             # through the explicit base_url.
             trust_env=False,
         )
+        self._image_fetcher = ImageFetcher(
+            transport=image_transport,
+            resolver=image_resolver,
+        )
 
     async def aclose(self) -> None:
         await self._client.aclose()
+        await self._image_fetcher.aclose()
 
     @property
     def enabled(self) -> bool:
@@ -64,7 +76,7 @@ class DashScopeClient:
 
     @property
     def _openai_mode(self) -> bool:
-        return settings.is_openai_compatible
+        return "dashscope.aliyuncs.com" not in self._base_url
 
     # ------------------------------------------------------------------
     # Text similarity (high-level convenience for match service)
@@ -74,11 +86,6 @@ class DashScopeClient:
         self,
         lost_text: str,
         found_text: str,
-        *,
-        lost_location: str | None = None,
-        found_location: str | None = None,
-        lost_time: str | None = None,
-        found_time: str | None = None,
     ) -> float | None:
         """Rate text similarity 0-100 using the configured LLM or embeddings.
 
@@ -89,9 +96,7 @@ class DashScopeClient:
             return None
 
         if settings.LLM_MODEL:
-            return await self._chat_similarity(
-                lost_text, found_text, lost_location, found_location, lost_time, found_time
-            )
+            return await self._chat_similarity(lost_text, found_text)
 
         embedding_model = settings.TEXT_EMBEDDING_MODEL or settings.DASHSCOPE_TEXT_EMBEDDING_MODEL
         if embedding_model:
@@ -149,10 +154,6 @@ class DashScopeClient:
         self,
         lost_text: str,
         found_text: str,
-        lost_location: str | None,
-        found_location: str | None,
-        lost_time: str | None,
-        found_time: str | None,
     ) -> float | None:
         """Ask the LLM to rate how likely these two items are the same, 0-100."""
         system = (
@@ -161,13 +162,7 @@ class DashScopeClient:
             "只回复一个数字，不要有任何其他文字。"
         )
         user = (
-            f"失物信息: 描述={lost_text}"
-            f"{f', 地点={lost_location}' if lost_location else ''}"
-            f"{f', 时间={lost_time}' if lost_time else ''}\n"
-            f"招领信息: 描述={found_text}"
-            f"{f', 地点={found_location}' if found_location else ''}"
-            f"{f', 时间={found_time}' if found_time else ''}\n"
-            "请给出相似度分数 (0-100):"
+            f"失物名称与描述: {lost_text}\n招领名称与描述: {found_text}\n请给出相似度分数 (0-100):"
         )
         raw = await self.chat_completion(system, user)
         if raw is None:
@@ -255,10 +250,15 @@ class DashScopeClient:
         vl_model = settings.DASHSCOPE_VL_MODEL
         if not vl_model:
             return None
+        try:
+            image_source = await self._image_fetcher.fetch_data_uri(image_url)
+        except ImageDownloadError as exc:
+            logger.warning("[ai:50002] VL image download rejected: {}", str(exc))
+            return None
 
         if self._openai_mode:
-            return await self._vl_openai(vl_model, image_url, prompt)
-        return await self._vl_dashscope(vl_model, image_url, prompt)
+            return await self._vl_openai(vl_model, image_source, prompt)
+        return await self._vl_dashscope(vl_model, image_source, prompt)
 
     async def _vl_openai(self, model: str, image_url: str, prompt: str) -> str | None:
         payload: dict[str, Any] = {

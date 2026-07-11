@@ -45,6 +45,7 @@
 | `db` | `Base`、`engine`、`AsyncSession` 工厂、ULID 生成 |
 | `user` | 注册登录、个人资料、身份认证、角色管理 |
 | `item` | 失物发布、招领发布、搜索筛选、状态变更、文件上传 |
+| `job` | `durable_jobs` outbox、任务领取、退避重试、lifespan runner |
 | `match` | 匹配任务触发、结果存储、匹配列表查询 |
 | `claim` | 认领申请、问答验证、凭证审核、交接流程 |
 | `credit` | 信誉积分计算、流水记录、权限限制 |
@@ -64,8 +65,9 @@
 
 ### 3.3 模块调用关系
 
-- `item` 发布成功 → 通过 `BackgroundTasks` 调 `match.service.trigger_match()`
-- `match.service` 通过 httpx 调 AI 服务计算得分，写入 `match_results`
+- `item` 发布/编辑事务 → 同事务写入版本化 `durable_jobs`；提交后的 `BackgroundTasks` 只唤醒 runner
+- `job.runner` 领取 `MATCH` / `CLASSIFY` / `SENSITIVE`，通过业务 service 执行且不允许内部提交
+- `match.service` 通过 httpx 调 AI 服务计算得分，将 `match_results` 与通知原子写入
 - `claim.service` 使用 `match` 结果发起认领申请
 - `claim.service` 完成后调用 `notification.service` 和 `credit.service`
 - `admin` 跨模块读取数据，必须通过对应模块的 `service`，**不得绕过访问 repository**

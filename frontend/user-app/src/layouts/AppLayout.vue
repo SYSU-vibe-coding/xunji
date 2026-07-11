@@ -36,7 +36,7 @@ watch(
       <main class="content">
         <RouterView v-slot="{ Component, route: r }">
           <Transition name="fade-slide" mode="out-in">
-            <component :is="Component" :key="r.fullPath" />
+            <component :is="Component" :key="r.path" />
           </Transition>
         </RouterView>
       </main>
@@ -72,7 +72,7 @@ watch(
     display: none;
   }
   .content {
-    padding: 16px;
+    padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
   }
 }
 </style>

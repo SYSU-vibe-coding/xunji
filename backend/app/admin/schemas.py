@@ -4,7 +4,7 @@ from pydantic.alias_generators import to_camel
 VALID_REVIEW_ACTIONS = {"APPROVE", "REJECT"}
 VALID_REPORT_ACTIONS = {"VALID", "INVALID"}
 VALID_ANNOUNCEMENT_STATUSES = {"DRAFT", "PUBLISHED", "OFFLINE"}
-VALID_USER_STATUSES = {"ACTIVE", "DISABLED", "CANCELLED"}
+VALID_USER_STATUSES = {"ACTIVE", "DISABLED"}
 VALID_BIZ_TYPES = {"LOST", "FOUND"}
 
 
@@ -50,6 +50,18 @@ class ReportHandleRequest(BaseModel):
             raise ValueError(msg)
         return v
 
+    @model_validator(mode="after")
+    def validate_result_and_penalty(self) -> "ReportHandleRequest":
+        if self.action == "VALID" and not self.result:
+            raise ValueError("result is required when action is VALID")
+        if self.credit_delta is not None and self.credit_delta >= 0:
+            raise ValueError("creditDelta must be negative")
+        if self.action == "INVALID" and (
+            self.credit_delta is not None or self.reason_code is not None
+        ):
+            raise ValueError("INVALID reports cannot include a penalty")
+        return self
+
 
 class AnnouncementCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
@@ -70,6 +82,12 @@ class UserStatusRequest(BaseModel):
             msg = f"status must be one of {VALID_USER_STATUSES}"
             raise ValueError(msg)
         return v
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> "UserStatusRequest":
+        if self.status == "DISABLED" and not self.reason:
+            raise ValueError("reason is required when status is DISABLED")
+        return self
 
 
 class MatchIntervalRequest(BaseModel):

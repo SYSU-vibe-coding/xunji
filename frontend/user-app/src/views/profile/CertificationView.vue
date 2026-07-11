@@ -2,48 +2,63 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
+import EmptyState from '@/components/EmptyState.vue';
 import ImageUploader from '@/components/ImageUploader.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { getMyCertification, submitCertification } from '@/api/user';
 import { ApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
-import type { CertificationDetail } from '@xunji/shared';
+import { ErrorCode, isConflictApiError, type CertificationDetail } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
 
 const auth = useAuthStore();
 
 const current = ref<CertificationDetail | null>(null);
 const loading = ref(true);
+const loadError = ref('');
 const submitting = ref(false);
+const imageUploading = ref(false);
+const imageUploadError = ref<string | null>(null);
 
 const form = reactive({
   campusId: '',
   realName: '',
-  imageUrls: [] as string[],
+  imageRefs: [] as string[],
+  previewUrls: [] as string[],
 });
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     const data = await getMyCertification();
     current.value = data;
     if (data) {
       form.campusId = data.campusId;
       form.realName = data.realName ?? '';
-      form.imageUrls = data.documentImageUrl ? [data.documentImageUrl] : [];
+      form.imageRefs = data.documentImageRef ? [data.documentImageRef] : [];
+      form.previewUrls = data.documentImageUrl ? [data.documentImageUrl] : [];
     }
   } catch (err) {
-    if (!(err instanceof ApiError && err.code === 40404)) {
-      // 404 视为「尚未提交认证」，无需报错
-    }
+    if (err instanceof ApiError && err.code === ErrorCode.NOT_FOUND) return;
+    loadError.value = err instanceof ApiError ? err.message : '认证信息加载失败';
   } finally {
     loading.value = false;
   }
 }
 
 async function submit() {
-  if (!form.campusId || !form.realName || !form.imageUrls.length) {
+  if (submitting.value) return;
+  if (imageUploading.value) {
+    ElMessage.warning('证件图片仍在上传，请稍候');
+    return;
+  }
+  if (imageUploadError.value) {
+    ElMessage.warning('证件图片上传失败，请移除后重试');
+    return;
+  }
+  if (!form.campusId || !form.realName || !form.imageRefs.length) {
     ElMessage.warning('请填写完整信息并上传证件图片');
     return;
   }
@@ -52,11 +67,16 @@ async function submit() {
     await submitCertification({
       campusId: form.campusId.trim(),
       realName: form.realName.trim(),
-      documentImageUrl: form.imageUrls[0],
+      documentImageRef: form.imageRefs[0],
     });
     ElMessage.success('已提交，等待审核');
     await Promise.all([load(), auth.loadProfile()]);
   } catch (err) {
+    if (isConflictApiError(err)) {
+      ElMessage.warning('认证状态已变化，已刷新最新信息');
+      await Promise.allSettled([load(), auth.loadProfile()]);
+      return;
+    }
     ElMessage.error(err instanceof ApiError ? err.message : '提交失败');
   } finally {
     submitting.value = false;
@@ -76,6 +96,13 @@ onMounted(load);
     />
 
     <el-skeleton v-if="loading" :rows="4" animated />
+    <EmptyState
+      v-else-if="loadError"
+      title="认证信息加载失败"
+      :description="loadError"
+      action-text="重试"
+      @action="load"
+    />
     <template v-else>
       <el-card v-if="current" shadow="never" class="status-card">
         <div class="row">
@@ -102,11 +129,24 @@ onMounted(load);
             <el-input v-model="form.realName" maxlength="20" placeholder="按证件填写" />
           </el-form-item>
           <el-form-item label="证件图片（仅 1 张）">
-            <ImageUploader v-model="form.imageUrls" biz-type="CERT" :max="1" />
+            <ImageUploader
+              v-model="form.imageRefs"
+              :preview-urls="form.previewUrls"
+              biz-type="CERT"
+              :max="1"
+              @uploading-change="imageUploading = $event"
+              @error-change="imageUploadError = $event"
+            />
             <div class="tip">建议上传校园卡正面，确保信息清晰可读</div>
           </el-form-item>
         </el-form>
-        <el-button type="primary" size="large" :loading="submitting" @click="submit">
+        <el-button
+          type="primary"
+          size="large"
+          :loading="submitting"
+          :disabled="imageUploading || Boolean(imageUploadError)"
+          @click="submit"
+        >
           提交认证
         </el-button>
       </el-card>

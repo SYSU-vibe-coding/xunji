@@ -1,6 +1,6 @@
 from typing import cast
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.notification.models import Notification
@@ -14,6 +14,27 @@ class NotificationRepository:
         self._session.add(notification)
         await self._session.flush()
         return notification
+
+    async def create_batch(self, notifications: list[Notification]) -> None:
+        if not notifications:
+            return
+        await self._session.execute(
+            insert(Notification),
+            [
+                {
+                    "id": notice.id,
+                    "user_id": notice.user_id,
+                    "notice_type": notice.notice_type,
+                    "title": notice.title,
+                    "content": notice.content,
+                    "is_read": notice.is_read or 0,
+                    "related_type": notice.related_type,
+                    "related_id": notice.related_id,
+                    "priority": notice.priority,
+                }
+                for notice in notifications
+            ],
+        )
 
     async def get_by_id(self, notification_id: str) -> Notification | None:
         result = await self._session.execute(

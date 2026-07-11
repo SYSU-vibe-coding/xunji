@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 
 import StatusTag from '@/components/StatusTag.vue';
 import ImageUploader from '@/components/ImageUploader.vue';
+import EmptyState from '@/components/EmptyState.vue';
 import {
   appealClaim,
   confirmHandover,
@@ -20,6 +21,7 @@ import {
   type HandoverMethod,
   handoverMethodLabels,
   handoverMethodOptions,
+  isConflictApiError,
   verifyLevelLabels,
 } from '@xunji/shared';
 import { shortDateTime, toBackendDateTime } from '@/utils/format';
@@ -31,6 +33,7 @@ const auth = useAuthStore();
 const id = computed(() => route.params.id as string);
 const detail = ref<ClaimDetail | null>(null);
 const loading = ref(true);
+const loadError = ref('');
 
 const STAGES = ['PENDING', 'ANSWER_PASSED', 'PROOF_PENDING', 'APPROVED', 'HANDED_OVER'] as const;
 const stageIndex = computed(() => {
@@ -40,6 +43,9 @@ const stageIndex = computed(() => {
 });
 
 const isClaimant = computed(() => detail.value?.claimantId === auth.profile?.id);
+const isFinder = computed(() => Boolean(
+  detail.value && auth.profile?.id && detail.value.claimantId !== auth.profile.id,
+));
 
 const proofForm = reactive({ proofImageUrls: [] as string[], proofText: '' });
 const appealReason = ref('');
@@ -51,23 +57,34 @@ const handoverForm = reactive({
 
 const reviewing = ref(false);
 const submittingProof = ref(false);
+const proofUploading = ref(false);
+const proofUploadError = ref<string | null>(null);
 const appealing = ref(false);
 const creatingHandover = ref(false);
 const confirming = ref(false);
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     detail.value = await getClaim(id.value);
   } catch (err) {
-    ElMessage.error(err instanceof ApiError ? err.message : '加载失败');
+    detail.value = null;
+    loadError.value = err instanceof ApiError ? err.message : '加载失败，请稍后重试';
   } finally {
     loading.value = false;
   }
 }
 
+async function refreshOnConflict(err: unknown): Promise<boolean> {
+  if (!isConflictApiError(err)) return false;
+  ElMessage.warning('认领状态已变化，已关闭旧操作并刷新最新详情');
+  await load();
+  return true;
+}
+
 async function handleReview(action: 'APPROVE' | 'REJECT') {
-  if (!detail.value) return;
+  if (reviewing.value || !detail.value) return;
   let comment = '';
   if (action === 'REJECT') {
     try {
@@ -87,6 +104,7 @@ async function handleReview(action: 'APPROVE' | 'REJECT') {
     ElMessage.success(action === 'APPROVE' ? '已通过' : '已驳回');
     await load();
   } catch (err) {
+    if (await refreshOnConflict(err)) return;
     ElMessage.error(err instanceof ApiError ? err.message : '处理失败');
   } finally {
     reviewing.value = false;
@@ -94,7 +112,15 @@ async function handleReview(action: 'APPROVE' | 'REJECT') {
 }
 
 async function submitProof() {
-  if (!detail.value) return;
+  if (submittingProof.value || !detail.value) return;
+  if (proofUploading.value) {
+    ElMessage.warning('图片仍在上传，请稍候');
+    return;
+  }
+  if (proofUploadError.value) {
+    ElMessage.warning('有图片上传失败，请移除后重试');
+    return;
+  }
   if (!proofForm.proofImageUrls.length) {
     ElMessage.warning('请上传至少 1 张凭证图片');
     return;
@@ -110,6 +136,7 @@ async function submitProof() {
     proofForm.proofText = '';
     await load();
   } catch (err) {
+    if (await refreshOnConflict(err)) return;
     ElMessage.error(err instanceof ApiError ? err.message : '提交失败');
   } finally {
     submittingProof.value = false;
@@ -117,6 +144,7 @@ async function submitProof() {
 }
 
 async function submitAppeal() {
+  if (appealing.value) return;
   if (!detail.value || !appealReason.value.trim()) {
     ElMessage.warning('请填写申诉理由');
     return;
@@ -128,6 +156,7 @@ async function submitAppeal() {
     appealReason.value = '';
     await load();
   } catch (err) {
+    if (await refreshOnConflict(err)) return;
     ElMessage.error(err instanceof ApiError ? err.message : '提交失败');
   } finally {
     appealing.value = false;
@@ -135,8 +164,8 @@ async function submitAppeal() {
 }
 
 async function submitHandover() {
-  if (!detail.value) return;
-  if (!handoverForm.handoverLocation || !handoverForm.handoverTime) {
+  if (creatingHandover.value || !detail.value) return;
+  if (!handoverForm.handoverLocation.trim() || !handoverForm.handoverTime) {
     ElMessage.warning('请填写交接地点与时间');
     return;
   }
@@ -144,12 +173,13 @@ async function submitHandover() {
   try {
     await createHandover(detail.value.id, {
       method: handoverForm.method,
-      handoverLocation: handoverForm.handoverLocation,
+      handoverLocation: handoverForm.handoverLocation.trim(),
       handoverTime: toBackendDateTime(handoverForm.handoverTime),
     });
     ElMessage.success('交接已创建，请双方按时确认');
     await load();
   } catch (err) {
+    if (await refreshOnConflict(err)) return;
     ElMessage.error(err instanceof ApiError ? err.message : '创建失败');
   } finally {
     creatingHandover.value = false;
@@ -157,13 +187,14 @@ async function submitHandover() {
 }
 
 async function doConfirmHandover(role: 'OWNER' | 'FINDER') {
-  if (!detail.value) return;
+  if (confirming.value || !detail.value) return;
   confirming.value = true;
   try {
     await confirmHandover(detail.value.id, { role });
     ElMessage.success('已确认交接');
     await load();
   } catch (err) {
+    if (await refreshOnConflict(err)) return;
     ElMessage.error(err instanceof ApiError ? err.message : '操作失败');
   } finally {
     confirming.value = false;
@@ -209,7 +240,11 @@ onMounted(load);
         <div v-for="a in detail.answers" :key="a.questionId" class="answer-row">
           <div class="q">{{ a.questionText }}</div>
           <div class="a">{{ a.answerText }}</div>
-          <el-tag size="small" :type="a.matchScore >= 60 ? 'success' : 'warning'">
+          <el-tag
+            v-if="isFinder && a.matchScore !== null"
+            size="small"
+            :type="a.matchScore >= 60 ? 'success' : 'warning'"
+          >
             匹配 {{ Math.round(a.matchScore) }}%
           </el-tag>
         </div>
@@ -231,9 +266,9 @@ onMounted(load);
         </div>
       </el-card>
 
-      <!-- 拾获方审核（PENDING / ANSWER_PASSED / PROOF_PENDING） -->
+      <!-- 拾获方审核（申诉中由管理员处理） -->
       <el-card
-        v-if="!isClaimant && ['PENDING', 'ANSWER_PASSED', 'PROOF_PENDING', 'APPEALING'].includes(detail.reviewStatus)"
+        v-if="isFinder && ['PENDING', 'ANSWER_PASSED', 'PROOF_PENDING'].includes(detail.reviewStatus)"
         shadow="never"
         class="action-card"
       >
@@ -255,7 +290,13 @@ onMounted(load);
         class="action-card"
       >
         <template #header><strong>补交凭证</strong></template>
-        <ImageUploader v-model="proofForm.proofImageUrls" biz-type="CLAIM_PROOF" :max="5" />
+        <ImageUploader
+          v-model="proofForm.proofImageUrls"
+          biz-type="CLAIM_PROOF"
+          :max="5"
+          @uploading-change="proofUploading = $event"
+          @error-change="proofUploadError = $event"
+        />
         <el-input
           v-model="proofForm.proofText"
           type="textarea"
@@ -265,7 +306,12 @@ onMounted(load);
           placeholder="可补充文字说明"
           class="proof-input"
         />
-        <el-button type="primary" :loading="submittingProof" @click="submitProof">
+        <el-button
+          type="primary"
+          :loading="submittingProof"
+          :disabled="proofUploading || Boolean(proofUploadError)"
+          @click="submitProof"
+        >
           提交凭证
         </el-button>
       </el-card>
@@ -292,7 +338,7 @@ onMounted(load);
 
       <!-- 交接（APPROVED 且尚未创建交接） -->
       <el-card
-        v-if="!isClaimant && detail.reviewStatus === 'APPROVED' && !detail.handover"
+        v-if="detail.reviewStatus === 'APPROVED' && !detail.handover"
         shadow="never"
         class="action-card"
       >
@@ -353,7 +399,7 @@ onMounted(load);
             我（失主）确认完成
           </el-button>
           <el-button
-            v-if="!isClaimant && !detail.handover.finderConfirmed"
+            v-if="isFinder && !detail.handover.finderConfirmed"
             type="primary"
             :loading="confirming"
             @click="doConfirmHandover('FINDER')"
@@ -364,6 +410,13 @@ onMounted(load);
       </el-card>
     </template>
 
+    <EmptyState
+      v-else-if="loadError"
+      title="认领记录加载失败"
+      :description="loadError"
+      action-text="重试"
+      @action="load"
+    />
     <el-empty v-else description="认领不存在或无访问权限" />
   </div>
 </template>
@@ -455,5 +508,21 @@ onMounted(load);
   .answer-row {
     grid-template-columns: 1fr;
   }
+
+  .action-card .actions,
+  .handover-card .actions {
+    flex-direction: column;
+
+    .el-button {
+      width: 100%;
+      margin-left: 0;
+    }
+  }
+
+  .action-card > :deep(.el-card__body) > .el-button {
+    width: 100%;
+    min-height: 40px;
+  }
 }
+
 </style>

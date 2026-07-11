@@ -2,7 +2,6 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  Bell,
   ChatLineRound,
   Document,
   Medal,
@@ -12,44 +11,94 @@ import {
 } from '@element-plus/icons-vue';
 
 import { getDashboard, listCertifications, listReports } from '@/api/admin';
-import { isAuthApiError } from '@/api/http';
+import { ApiError, isUnauthorizedApiError } from '@/api/http';
 import StatusTag from '@/components/StatusTag.vue';
 import type { CertificationReview, DashboardStats, ReportRecord } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
+import { createLatestRequestGuard } from '@/utils/admin-list';
 
 const router = useRouter();
 const stats = ref<DashboardStats | null>(null);
 const pendingCerts = ref<CertificationReview[]>([]);
 const pendingReports = ref<ReportRecord[]>([]);
-const loading = ref(true);
+const statsLoading = ref(true);
+const certsLoading = ref(true);
+const reportsLoading = ref(true);
+const statsError = ref('');
+const certsError = ref('');
+const reportsError = ref('');
+const statsGuard = createLatestRequestGuard();
+const certsGuard = createLatestRequestGuard();
+const reportsGuard = createLatestRequestGuard();
 
-async function load() {
-  loading.value = true;
+function errorText(err: unknown, fallback: string) {
+  return err instanceof ApiError ? err.message : fallback;
+}
+
+async function loadStats() {
+  const requestId = statsGuard.next();
+  statsLoading.value = true;
+  statsError.value = '';
   try {
-    const [s, c, r] = await Promise.all([
-      getDashboard(),
-      listCertifications({ pageSize: 5, reviewStatus: 'PENDING' }),
-      listReports({ pageSize: 5, handleStatus: 'PENDING' }),
-    ]);
-    stats.value = s;
-    pendingCerts.value = c.list;
-    pendingReports.value = r.list;
+    const data = await getDashboard();
+    if (statsGuard.isLatest(requestId)) stats.value = data;
   } catch (err) {
-    if (isAuthApiError(err)) return;
+    if (!statsGuard.isLatest(requestId) || isUnauthorizedApiError(err)) return;
+    stats.value = null;
+    statsError.value = errorText(err, '统计数据加载失败');
   } finally {
-    loading.value = false;
+    if (statsGuard.isLatest(requestId)) statsLoading.value = false;
   }
 }
 
-onMounted(load);
+async function loadCerts() {
+  const requestId = certsGuard.next();
+  certsLoading.value = true;
+  certsError.value = '';
+  try {
+    const data = await listCertifications({ pageSize: 5, reviewStatus: 'PENDING' });
+    if (certsGuard.isLatest(requestId)) pendingCerts.value = data.list;
+  } catch (err) {
+    if (!certsGuard.isLatest(requestId) || isUnauthorizedApiError(err)) return;
+    pendingCerts.value = [];
+    certsError.value = errorText(err, '待审批认证加载失败');
+  } finally {
+    if (certsGuard.isLatest(requestId)) certsLoading.value = false;
+  }
+}
+
+async function loadReports() {
+  const requestId = reportsGuard.next();
+  reportsLoading.value = true;
+  reportsError.value = '';
+  try {
+    const data = await listReports({ pageSize: 5, handleStatus: 'PENDING' });
+    if (reportsGuard.isLatest(requestId)) pendingReports.value = data.list;
+  } catch (err) {
+    if (!reportsGuard.isLatest(requestId) || isUnauthorizedApiError(err)) return;
+    pendingReports.value = [];
+    reportsError.value = errorText(err, '待处理举报加载失败');
+  } finally {
+    if (reportsGuard.isLatest(requestId)) reportsLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  void loadStats();
+  void loadCerts();
+  void loadReports();
+});
 </script>
 
 <template>
   <div class="page">
-    <el-skeleton v-if="loading" :rows="4" animated />
-
-    <template v-else>
-      <section class="stat-grid">
+    <el-skeleton v-if="statsLoading" :rows="2" animated />
+    <el-card v-else-if="statsError" shadow="never">
+      <el-result icon="error" title="统计数据加载失败" :sub-title="statsError">
+        <template #extra><el-button type="primary" @click="loadStats">重试</el-button></template>
+      </el-result>
+    </el-card>
+    <section v-else-if="stats" class="stat-grid">
         <el-card shadow="never" class="stat-card">
           <div class="stat-icon" style="background: rgba(13,79,79,0.12); color:#0d4f4f;">
             <el-icon :size="22"><User /></el-icon>
@@ -86,9 +135,9 @@ onMounted(load);
             <strong>{{ stats?.avgHandleHours ?? 0 }}h</strong>
           </div>
         </el-card>
-      </section>
+    </section>
 
-      <section class="grid-2">
+    <section class="grid-2">
         <el-card shadow="never">
           <template #header>
             <div class="head-row">
@@ -101,8 +150,12 @@ onMounted(load);
               </el-button>
             </div>
           </template>
+          <el-skeleton v-if="certsLoading" :rows="4" animated />
+          <el-result v-else-if="certsError" icon="error" title="待审批认证加载失败" :sub-title="certsError">
+            <template #extra><el-button type="primary" @click="loadCerts">重试</el-button></template>
+          </el-result>
           <el-table
-            v-if="pendingCerts.length"
+            v-else-if="pendingCerts.length"
             :data="pendingCerts"
             stripe
             style="width: 100%"
@@ -135,8 +188,12 @@ onMounted(load);
               </el-button>
             </div>
           </template>
+          <el-skeleton v-if="reportsLoading" :rows="4" animated />
+          <el-result v-else-if="reportsError" icon="error" title="待处理举报加载失败" :sub-title="reportsError">
+            <template #extra><el-button type="primary" @click="loadReports">重试</el-button></template>
+          </el-result>
           <el-table
-            v-if="pendingReports.length"
+            v-else-if="pendingReports.length"
             :data="pendingReports"
             stripe
             style="width: 100%"
@@ -156,16 +213,15 @@ onMounted(load);
           </el-table>
           <el-empty v-else description="当前没有待处理举报" :image-size="80" />
         </el-card>
-      </section>
+    </section>
 
-      <el-alert
+    <el-alert
         type="info"
         show-icon
         :closable="false"
         title="温馨提示"
         description="所有认证、内容、举报的处理动作都会自动写入操作日志和站内通知"
-      />
-    </template>
+    />
   </div>
 </template>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Document } from '@element-plus/icons-vue';
+import { ArrowLeft, Document } from '@element-plus/icons-vue';
 
 import EmptyState from '@/components/EmptyState.vue';
 import { getAnnouncement } from '@/api/notification';
@@ -13,6 +13,7 @@ const router = useRouter();
 const detail = ref<AnnouncementDetail | null>(null);
 const loading = ref(true);
 const errorMessage = ref('');
+const announcementListRoute = { name: 'notifications', query: { tab: 'announcements' } };
 
 async function load() {
   loading.value = true;
@@ -34,13 +35,17 @@ onMounted(load);
 
 <template>
   <div class="page">
+    <RouterLink :to="announcementListRoute" class="back-link">
+      <el-icon><ArrowLeft /></el-icon>
+      返回公告
+    </RouterLink>
     <el-skeleton v-if="loading" :rows="9" animated />
     <EmptyState
       v-else-if="errorMessage"
       title="公告不可访问"
       :description="`${errorMessage}。公告可能已下线。`"
       action-text="返回公告列表"
-      @action="router.push('/announcements')"
+      @action="router.push(announcementListRoute)"
     />
     <article v-else-if="detail" class="paper">
       <div class="paper-mark"><Document /></div>
@@ -61,6 +66,24 @@ onMounted(load);
 .page {
   max-width: 860px;
   margin: 0 auto;
+}
+.back-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 14px;
+  color: var(--el-color-primary);
+  font-size: 13px;
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--el-color-primary);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
 }
 .paper {
   position: relative;

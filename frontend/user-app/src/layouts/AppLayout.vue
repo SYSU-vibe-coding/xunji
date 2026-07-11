@@ -19,9 +19,9 @@ onMounted(async () => {
   if (auth.token) await notice.refresh();
 });
 
-// 路由切换时刷新未读数（避免在通知页停留太久 dock 角标过期）
+// 仅在页面类型变化时刷新，query 更新不应重复请求未读数。
 watch(
-  () => route.fullPath,
+  () => route.name,
   () => {
     if (auth.token) void notice.refresh();
   },
@@ -49,6 +49,7 @@ watch(
 .app-shell {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--xunji-bg);
 }
 
@@ -57,13 +58,17 @@ watch(
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .content {
   flex: 1;
-  padding: 24px;
-  max-width: 1280px;
   width: 100%;
+  max-width: var(--xunji-content-max);
+  padding: var(--xunji-space-6) max(var(--xunji-space-6), env(safe-area-inset-right))
+    max(var(--xunji-space-6), env(safe-area-inset-bottom))
+    max(var(--xunji-space-6), env(safe-area-inset-left));
   margin: 0 auto;
 }
 
@@ -71,8 +76,11 @@ watch(
   .sidebar-desktop {
     display: none;
   }
+
   .content {
-    padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+    padding: var(--xunji-space-4) max(var(--xunji-space-4), env(safe-area-inset-right))
+      calc(var(--xunji-dock-height) + env(safe-area-inset-bottom) + var(--xunji-space-4))
+      max(var(--xunji-space-4), env(safe-area-inset-left));
   }
 }
 </style>

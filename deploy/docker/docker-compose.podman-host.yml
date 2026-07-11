@@ -44,6 +44,7 @@ services:
       DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/api/v1}
       LLM_MODEL: ${LLM_MODEL:-}
       TEXT_EMBEDDING_MODEL: ${TEXT_EMBEDDING_MODEL:-}
+      DASHSCOPE_VL_MODEL: ${DASHSCOPE_VL_MODEL:-qwen-vl-max}
       DASHSCOPE_TIMEOUT: ${DASHSCOPE_TIMEOUT:-8.0}
 
   backend:
@@ -78,6 +79,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET: ${MINIO_BUCKET:-xunji}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_SECURE: "false"
       # Used only as the host in short-lived presigned URLs; the bucket remains private.
       MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:9000}

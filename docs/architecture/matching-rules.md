@@ -31,7 +31,7 @@ hours_distance = distance(found.time, [lost.timeStart, lost.timeEnd])
 time_score     = max(0, 100 - hours_distance * 2) # 距区间超过 50h 归零
 ```
 
-`keyword_overlap`：按字符串分词后 Jaccard 相似度。
+`keyword_overlap`：英文按字母数字词元、中文按连续二元字符切分后计算 Jaccard 相似度。中文二元切分用于覆盖“雨伞 / 黑色伞 / 黑色雨伞”这类没有空格但语义明显重叠的降级场景。
 
 拾获时刻落在失物时间区间内时 `hours_distance = 0`；在区间外时取到最近端点的小时距离。规则响应标记 `imageAvailable=false`、`degraded=true`、`scoreSource=RULE_BASED`。
 

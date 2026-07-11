@@ -54,3 +54,24 @@ def test_time_decay_uses_minimum_interval_distance_in_hours() -> None:
     b = {"name": "x", "time": "2026-04-30T13:00:00"}
     scores = rule_based_score(a, b)
     assert scores["timeScore"] == 94.0
+
+
+def test_rule_score_uses_cjk_bigrams_for_similar_item_names() -> None:
+    scores = rule_based_score(
+        {
+            "name": "雨伞",
+            "description": "黑色雨伞",
+            "location": "宿舍",
+            "time": "2026-07-08T00:00:00",
+            "timeEnd": "2026-07-09T00:00:00",
+        },
+        {
+            "name": "黑色伞",
+            "description": "黑色雨伞",
+            "location": "宿舍",
+            "time": "2026-07-09T00:00:00",
+        },
+    )
+
+    assert scores["textScore"] >= 70
+    assert scores["totalScore"] >= 70

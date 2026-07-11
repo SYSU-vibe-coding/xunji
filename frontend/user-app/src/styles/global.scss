@@ -1,37 +1,179 @@
 // 寻迹品牌色与全局样式
 :root {
+  color-scheme: light;
+
+  // 品牌与语义颜色。保留原变量名称，供现有页面继续使用。
   --xunji-primary: #0d4f4f;
+  --xunji-primary-hover: #176a66;
   --xunji-primary-dark: #083a3a;
+  --xunji-primary-soft: #e8f2f1;
+  --xunji-primary-light-3: #4e8383;
+  --xunji-primary-light-5: #86aaaa;
+  --xunji-primary-light-7: #b6cccc;
+  --xunji-primary-light-8: #cfe0df;
+  --xunji-primary-light-9: #e8f0f0;
   --xunji-accent: #7c3aed;
   --xunji-accent-soft: #ede9fe;
-  --xunji-bg: #f6f8fa;
+  --xunji-success: #16846f;
+  --xunji-success-light-3: #589c8c;
+  --xunji-success-light-5: #8bc1b6;
+  --xunji-success-light-7: #b9ddd5;
+  --xunji-success-light-8: #d1e9e4;
+  --xunji-success-soft: #e7f5f1;
+  --xunji-success-dark: #126a59;
+  --xunji-warning: #b7791f;
+  --xunji-warning-light-3: #cb9b62;
+  --xunji-warning-light-5: #dbb98f;
+  --xunji-warning-light-7: #ead6bc;
+  --xunji-warning-light-8: #f2e3d1;
+  --xunji-warning-soft: #fff7e6;
+  --xunji-warning-dark: #925f19;
+  --xunji-danger: #c2413b;
+  --xunji-danger-light-3: #d07873;
+  --xunji-danger-light-5: #dfa09d;
+  --xunji-danger-light-7: #edc6c4;
+  --xunji-danger-light-8: #f4d9d7;
+  --xunji-danger-soft: #fdf0ef;
+  --xunji-danger-dark: #9b342f;
+  --xunji-info: #5f6b76;
+  --xunji-info-light-3: #8b949c;
+  --xunji-info-light-5: #afb5ba;
+  --xunji-info-light-7: #cfd3d6;
+  --xunji-info-light-8: #dfe2e4;
+  --xunji-info-soft: #f0f3f5;
+  --xunji-info-dark: #4c565e;
+  --xunji-bg: #f4f6f5;
   --xunji-surface: #ffffff;
+  --xunji-surface-raised: #ffffff;
+  --xunji-surface-subtle: #eef2f1;
+  --xunji-surface-hover: #f7f9f8;
   --xunji-text: #1e293b;
+  --xunji-text-strong: #132220;
   --xunji-text-muted: #64748b;
-  --xunji-border: #e2e8f0;
-  --xunji-hero: linear-gradient(135deg, #0d4f4f 0%, #1e7a7a 45%, #7c3aed 100%);
+  --xunji-text-subtle: #83908e;
+  --xunji-text-inverse: #ffffff;
+  --xunji-border: #dce4e2;
+  --xunji-border-light: #e7eceb;
+  --xunji-border-lighter: #eef2f1;
+  --xunji-border-extra-light: #f5f7f6;
+  --xunji-border-strong: #c4d0cd;
+  --xunji-border-stronger: #aab9b5;
+  --xunji-fill: #eef2f1;
+  --xunji-fill-light: #f7f9f8;
+  --xunji-fill-lighter: #f9fbfa;
+  --xunji-fill-extra-light: #fcfdfd;
+  --xunji-fill-dark: #dbe3e1;
+  --xunji-fill-darker: #cad6d3;
+  --xunji-overlay: rgba(10, 24, 22, 0.52);
+  --xunji-focus-ring: rgba(13, 79, 79, 0.3);
+  --xunji-hero: linear-gradient(135deg, #0d4f4f 0%, #176a66 58%, #5b3aa4 100%);
+
+  // 间距
+  --xunji-space-1: 4px;
+  --xunji-space-2: 8px;
+  --xunji-space-3: 12px;
+  --xunji-space-4: 16px;
+  --xunji-space-5: 20px;
+  --xunji-space-6: 24px;
+  --xunji-space-8: 32px;
+  --xunji-space-10: 40px;
+  --xunji-space-12: 48px;
+
+  // 圆角
+  --xunji-radius-xs: 4px;
+  --xunji-radius-sm: 8px;
   --xunji-radius: 12px;
-  --xunji-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --xunji-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+  --xunji-radius-lg: 16px;
+  --xunji-radius-xl: 20px;
+  --xunji-radius-pill: 999px;
+
+  // 字体
+  --xunji-font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --xunji-font-size-xs: 12px;
+  --xunji-font-size-sm: 14px;
+  --xunji-font-size-base: 15px;
+  --xunji-font-size-lg: 18px;
+  --xunji-font-size-xl: 24px;
+  --xunji-font-weight-medium: 500;
+  --xunji-font-weight-semibold: 600;
+  --xunji-font-weight-bold: 700;
+  --xunji-line-height-tight: 1.3;
+  --xunji-line-height-base: 1.6;
+
+  // 壳层尺寸
+  --xunji-touch-target: 44px;
+  --xunji-header-height: 64px;
+  --xunji-header-height-mobile: 56px;
+  --xunji-dock-height: 72px;
+  --xunji-sidebar-width: 248px;
+  --xunji-content-max: 1280px;
+
+  // 阴影与层级
+  --xunji-shadow-sm: 0 1px 2px rgba(12, 30, 27, 0.06), 0 0 0 1px rgba(12, 30, 27, 0.02);
+  --xunji-shadow: 0 12px 32px rgba(12, 30, 27, 0.09), 0 2px 8px rgba(12, 30, 27, 0.04);
+  --xunji-shadow-lg: 0 20px 48px rgba(12, 30, 27, 0.14), 0 4px 12px rgba(12, 30, 27, 0.06);
+  --xunji-z-base: 1;
+  --xunji-z-sidebar: 90;
+  --xunji-z-header: 100;
+  --xunji-z-dock: 200;
+  --xunji-z-dropdown: 1000;
+  --xunji-z-overlay: 2000;
+
+  // 动效
+  --xunji-motion-fast: 120ms;
+  --xunji-motion-base: 180ms;
+  --xunji-motion-slow: 260ms;
+  --xunji-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --xunji-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html,
 body,
 #app {
-  height: 100%;
+  min-height: 100%;
+}
+
+html {
+  background: var(--xunji-bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body,
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
   color: var(--xunji-text);
   background: var(--xunji-bg);
+  font-family: var(--xunji-font-sans);
+  font-size: var(--xunji-font-size-base);
+  line-height: var(--xunji-line-height-base);
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
 }
 
 a {
@@ -39,22 +181,42 @@ a {
   text-decoration: none;
 }
 
+:where(a, button, input, select, textarea, [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 3px solid var(--xunji-focus-ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  color: var(--xunji-text-strong);
+  background: var(--xunji-primary-light-8);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.18);
-  border-radius: 999px;
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
+
+::-webkit-scrollbar-thumb {
+  background: rgba(38, 60, 56, 0.22);
+  border: 2px solid transparent;
+  border-radius: var(--xunji-radius-pill);
+  background-clip: padding-box;
+}
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.28);
+  background: rgba(38, 60, 56, 0.34);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 // 公共 utility
 .xunji-hero {
+  color: var(--xunji-text-inverse);
   background: var(--xunji-hero);
-  color: #fff;
   border-radius: var(--xunji-radius);
 }
 
@@ -69,17 +231,18 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 0 12px;
+  margin: 0 0 var(--xunji-space-3);
 
   h2 {
     margin: 0;
-    font-size: 18px;
-    font-weight: 600;
+    color: var(--xunji-text-strong);
+    font-size: var(--xunji-font-size-lg);
+    font-weight: var(--xunji-font-weight-semibold);
   }
 
   .eyebrow {
     color: var(--xunji-text-muted);
-    font-size: 12px;
+    font-size: var(--xunji-font-size-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -89,8 +252,8 @@ a {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 36px 16px;
+  gap: var(--xunji-space-2);
+  padding: 36px var(--xunji-space-4);
   color: var(--xunji-text-muted);
   text-align: center;
 }
@@ -98,8 +261,9 @@ a {
 // 页面切换过渡
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: opacity 0.12s ease;
+  transition: opacity var(--xunji-motion-fast) var(--xunji-ease-standard);
 }
+
 .fade-slide-enter-from,
 .fade-slide-leave-to {
   opacity: 0;
@@ -108,4 +272,19 @@ a {
 // EP 卡片细节微调
 .el-card.is-never-shadow {
   border-radius: var(--xunji-radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -56,6 +56,7 @@ services:
       DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/api/v1}
       LLM_MODEL: ${LLM_MODEL:-}
       TEXT_EMBEDDING_MODEL: ${TEXT_EMBEDDING_MODEL:-}
+      DASHSCOPE_VL_MODEL: ${DASHSCOPE_VL_MODEL:-qwen-vl-max}
       DASHSCOPE_TIMEOUT: ${DASHSCOPE_TIMEOUT:-8.0}
     ports:
       - "127.0.0.1:${AI_SERVICE_PORT:-5000}:5000"
@@ -104,6 +105,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET: ${MINIO_BUCKET:-xunji}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_SECURE: "false"
       # Browser-only signing endpoint. AI receives a separate minio:9000 short URL.
       MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:9000}

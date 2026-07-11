@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Box, Edit, Medal, Promotion, SwitchButton, Trophy } from '@element-plus/icons-vue';
+import {
+  ArrowRight,
+  Box,
+  Edit,
+  Medal,
+  Promotion,
+  SwitchButton,
+  Trophy,
+} from '@element-plus/icons-vue';
 
 import StatusTag from '@/components/StatusTag.vue';
 import ImageUploader from '@/components/ImageUploader.vue';
@@ -11,7 +19,6 @@ import { ApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
 import { getInitial } from '@/utils/format';
 
-const router = useRouter();
 const auth = useAuthStore();
 
 const editing = ref(false);
@@ -83,7 +90,7 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <el-card shadow="never" class="hero xunji-hero">
+    <el-card shadow="never" class="profile-panel">
       <div class="hero-row">
         <el-avatar :size="64" :src="auth.profile?.avatarUrl ?? undefined" class="avatar">
           {{ getInitial(auth.profile?.nickname) }}
@@ -93,7 +100,10 @@ onMounted(async () => {
             <h1>{{ auth.profile?.nickname ?? '同学' }}</h1>
             <StatusTag variant="cert" :value="auth.profile?.certStatus ?? 'UNVERIFIED'" />
           </div>
-          <p>{{ auth.profile?.phone ?? '—' }} · {{ auth.profile?.campusId ?? '未绑定校园编号' }}</p>
+          <div class="identity-meta">
+            <span>{{ auth.profile?.phone ?? '—' }}</span>
+            <span>{{ auth.profile?.campusId ?? '未绑定校园编号' }}</span>
+          </div>
           <div class="actions">
             <el-button size="small" type="primary" plain @click="openEdit">
               <el-icon><Edit /></el-icon>编辑资料
@@ -106,32 +116,52 @@ onMounted(async () => {
       </div>
     </el-card>
 
-    <section class="cards">
-      <el-card shadow="never" class="link-card" @click="router.push('/profile/items')">
-        <el-icon :size="22" color="#0d4f4f"><Box /></el-icon>
-        <strong>我的发布</strong>
-        <small>管理已发布的失物 / 招领</small>
-      </el-card>
-      <el-card shadow="never" class="link-card" @click="router.push('/profile/certification')">
-        <el-icon :size="22" color="#7c3aed"><Medal /></el-icon>
-        <strong>实名认证</strong>
-        <small>提交证件 · 解锁认领特权</small>
-      </el-card>
-      <el-card shadow="never" class="link-card" @click="router.push('/profile/credits')">
-        <el-icon :size="22" color="#f59e0b"><Trophy /></el-icon>
-        <strong>信誉积分</strong>
-        <small>查看积分变动流水</small>
-      </el-card>
-      <el-card shadow="never" class="link-card" @click="router.push('/claims')">
-        <el-icon :size="22" color="#14b8a6"><Promotion /></el-icon>
-        <strong>我的认领</strong>
-        <small>跟进认领进度与凭证</small>
-      </el-card>
+    <section class="account-section">
+      <header class="section-header">
+        <span>账号与业务</span>
+        <small>管理身份、发布和认领记录</small>
+      </header>
+      <div class="cards">
+        <RouterLink to="/profile/items" class="link-card">
+          <span class="entry-icon primary"><el-icon :size="21"><Box /></el-icon></span>
+          <span class="entry-copy">
+            <strong>我的发布</strong>
+            <small>管理已发布的失物 / 招领</small>
+          </span>
+          <el-icon class="entry-arrow"><ArrowRight /></el-icon>
+        </RouterLink>
+        <RouterLink to="/profile/certification" class="link-card">
+          <span class="entry-icon accent"><el-icon :size="21"><Medal /></el-icon></span>
+          <span class="entry-copy">
+            <strong>实名认证</strong>
+            <small>提交证件，解锁认领特权</small>
+          </span>
+          <el-icon class="entry-arrow"><ArrowRight /></el-icon>
+        </RouterLink>
+        <RouterLink to="/profile/credits" class="link-card">
+          <span class="entry-icon warm"><el-icon :size="21"><Trophy /></el-icon></span>
+          <span class="entry-copy">
+            <strong>信誉积分</strong>
+            <small>查看积分变动流水</small>
+          </span>
+          <el-icon class="entry-arrow"><ArrowRight /></el-icon>
+        </RouterLink>
+        <RouterLink to="/claims" class="link-card">
+          <span class="entry-icon success"><el-icon :size="21"><Promotion /></el-icon></span>
+          <span class="entry-copy">
+            <strong>我的认领</strong>
+            <small>跟进认领进度与凭证</small>
+          </span>
+          <el-icon class="entry-arrow"><ArrowRight /></el-icon>
+        </RouterLink>
+      </div>
     </section>
 
     <el-card shadow="never" class="danger-zone">
-      <strong>账号注销</strong>
-      <p>注销后账号将无法登录，所有活动失物与招领会关闭，关联匹配和待执行任务会失效</p>
+      <div class="danger-copy">
+        <strong>账号注销</strong>
+        <p>注销后无法恢复登录，活动中的失物、招领和待执行任务也会关闭。</p>
+      </div>
       <el-button type="danger" plain @click="handleCancel">注销账号</el-button>
     </el-card>
 
@@ -170,107 +200,346 @@ onMounted(async () => {
 .page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
+  min-width: 0;
 }
 
-.hero {
-  color: #fff;
-  border: none;
+.profile-panel {
+  position: relative;
+  overflow: hidden;
+  border-color: #d7e7e5;
+  background: #eef6f5;
+
+  &::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 4px;
+    background: var(--xunji-primary);
+    content: '';
+  }
 
   :deep(.el-card__body) {
-    padding: 24px;
+    padding: 26px 28px;
   }
 
   .hero-row {
     display: flex;
-    gap: 18px;
+    gap: 20px;
     align-items: center;
-    flex-wrap: wrap;
 
     .avatar {
-      background: rgba(255, 255, 255, 0.18);
+      flex: 0 0 auto;
+      border: 3px solid rgba(255, 255, 255, 0.88);
+      background: var(--xunji-primary);
       color: #fff;
       font-weight: 700;
       font-size: 24px;
+      box-shadow: 0 2px 10px rgba(13, 79, 79, 0.12);
     }
+
     .info {
       flex: 1;
-      min-width: 200px;
+      min-width: 0;
 
       .row {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 10px;
 
         h1 {
           margin: 0;
-          font-size: 22px;
-          color: #fff;
+          color: var(--xunji-text);
+          font-size: 23px;
+          letter-spacing: -0.02em;
         }
       }
-      p {
-        margin: 4px 0 12px;
-        color: rgba(255, 255, 255, 0.78);
-        font-size: 13px;
-      }
+
       .actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
+        margin-top: 15px;
+
+        .el-button {
+          min-height: 38px;
+          margin-left: 0;
+        }
       }
     }
+  }
+}
+
+.identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 16px;
+  margin-top: 7px;
+  color: var(--xunji-text-muted);
+  font-size: 13px;
+
+  span + span {
+    position: relative;
+
+    &::before {
+      position: absolute;
+      top: 50%;
+      left: -9px;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #94a3b8;
+      content: '';
+      transform: translateY(-50%);
+    }
+  }
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+
+  span {
+    color: var(--xunji-text);
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  small {
+    color: var(--xunji-text-muted);
+    font-size: 12px;
   }
 }
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
 .link-card {
-  cursor: pointer;
-  transition: transform 0.18s, box-shadow 0.18s;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 104px;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--xunji-border);
+  border-radius: var(--xunji-radius);
+  background: var(--xunji-surface);
+  box-shadow: var(--xunji-shadow-sm);
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
 
-  :deep(.el-card__body) {
-    padding: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  .entry-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+
+    &.primary {
+      background: #e7f1f0;
+      color: var(--xunji-primary);
+    }
+
+    &.accent {
+      background: var(--xunji-accent-soft);
+      color: var(--xunji-accent);
+    }
+
+    &.warm {
+      background: #fef3df;
+      color: #b97608;
+    }
+
+    &.success {
+      background: #e7f9f6;
+      color: #0d8b7d;
+    }
+  }
+
+  .entry-copy {
+    min-width: 0;
+  }
+
+  strong,
+  small {
+    display: block;
   }
 
   strong {
     font-weight: 600;
     color: var(--xunji-text);
   }
+
   small {
+    margin-top: 4px;
     color: var(--xunji-text-muted);
     font-size: 12px;
+    line-height: 1.4;
   }
 
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--xunji-shadow);
+  .entry-arrow {
+    color: #94a3b8;
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(13, 79, 79, 0.18);
+    outline-offset: 2px;
+  }
+
+  @media (hover: hover) {
+    &:hover {
+      border-color: #b6d6d6;
+      box-shadow: var(--xunji-shadow);
+      transform: translateY(-2px);
+    }
   }
 }
 
 .danger-zone {
-  border-color: rgba(239, 68, 68, 0.4);
+  border-color: var(--xunji-border);
+  border-left: 3px solid rgba(239, 68, 68, 0.55);
 
   :deep(.el-card__body) {
-    padding: 18px;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 18px 20px;
   }
+
+  .danger-copy {
+    min-width: 0;
+  }
+
   strong {
-    color: var(--el-color-danger);
+    color: var(--xunji-text);
     font-size: 15px;
   }
+
   p {
-    margin: 0;
+    margin: 5px 0 0;
     color: var(--xunji-text-muted);
     font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .el-button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    gap: 18px;
+  }
+
+  .profile-panel {
+    :deep(.el-card__body) {
+      padding: 20px 18px 20px 20px;
+    }
+
+    .hero-row {
+      align-items: flex-start;
+      gap: 14px;
+
+      .avatar {
+        width: 54px;
+        height: 54px;
+        font-size: 20px;
+      }
+
+      .info .row h1 {
+        font-size: 20px;
+      }
+
+      .info .actions {
+        gap: 8px;
+        margin-top: 13px;
+
+        .el-button {
+          min-height: 44px;
+        }
+      }
+    }
+  }
+
+  .identity-meta {
+    gap: 3px;
+    margin-top: 5px;
+
+    span {
+      display: block;
+      width: 100%;
+    }
+
+    span + span::before {
+      display: none;
+    }
+  }
+
+  .account-section {
+    overflow: hidden;
+    border: 1px solid var(--xunji-border);
+    border-radius: var(--xunji-radius);
+    background: var(--xunji-surface);
+  }
+
+  .section-header {
+    display: block;
+    margin: 0;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--xunji-border);
+
+    span,
+    small {
+      display: block;
+    }
+
+    small {
+      margin-top: 3px;
+    }
+  }
+
+  .cards {
+    display: block;
+  }
+
+  .link-card {
+    min-height: 72px;
+    padding: 12px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--xunji-border);
+    border-radius: 0;
+    box-shadow: none;
+
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    .entry-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+  }
+
+  .danger-zone :deep(.el-card__body) {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+
+    .el-button {
+      min-height: 44px;
+    }
   }
 }
 </style>

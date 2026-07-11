@@ -38,7 +38,10 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'announcements',
         name: 'announcements',
-        component: () => import('@/views/AnnouncementListView.vue'),
+        redirect: (to) => ({
+          name: 'notifications',
+          query: { ...to.query, tab: 'announcements' },
+        }),
       },
       {
         path: 'announcements/:id',

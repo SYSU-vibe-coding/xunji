@@ -65,6 +65,7 @@ class ObjectStorage:
             access_key=config.MINIO_ACCESS_KEY,
             secret_key=config.MINIO_SECRET_KEY,
             secure=public_url.scheme == "https",
+            region=config.MINIO_REGION,
         )
 
     async def ensure_private_bucket(self) -> None:

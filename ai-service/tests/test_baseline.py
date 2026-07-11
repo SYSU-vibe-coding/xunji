@@ -99,3 +99,9 @@ def test_time_score_uses_interval_and_decays_by_hour() -> None:
 
 def test_time_score_zero_when_one_missing() -> None:
     assert _baseline.time_score_value(None, "2026-04-30T09:00:00") == 0.0
+
+
+def test_keyword_overlap_supports_cjk_bigrams() -> None:
+    score = _baseline.keyword_overlap(["雨伞", "黑色雨伞"], ["黑色伞", "黑色雨伞"])
+
+    assert score >= 70

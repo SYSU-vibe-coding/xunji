@@ -211,4 +211,13 @@ def _has_text(name: str | None, description: str | None) -> bool:
 
 def _tokens(values: Iterable[str | None]) -> set[str]:
     text = _combined_text(values)
-    return {token for token in re.split(r"\W+", text) if token}
+    tokens: set[str] = set()
+    for segment in re.findall(r"[a-z0-9]+|[\u3400-\u9fff]+", text):
+        if re.fullmatch(r"[\u3400-\u9fff]+", segment):
+            if len(segment) == 1:
+                tokens.add(segment)
+            else:
+                tokens.update(segment[index : index + 2] for index in range(len(segment) - 1))
+        else:
+            tokens.add(segment)
+    return tokens

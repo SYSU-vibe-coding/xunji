@@ -136,4 +136,13 @@ def _combine(*parts: str | None) -> str:
 
 
 def _tokens(text: str) -> set[str]:
-    return {t for t in re.split(r"\W+", text.lower()) if t}
+    tokens: set[str] = set()
+    for segment in re.findall(r"[a-z0-9]+|[\u3400-\u9fff]+", text.lower()):
+        if re.fullmatch(r"[\u3400-\u9fff]+", segment):
+            if len(segment) == 1:
+                tokens.add(segment)
+            else:
+                tokens.update(segment[index : index + 2] for index in range(len(segment) - 1))
+        else:
+            tokens.add(segment)
+    return tokens

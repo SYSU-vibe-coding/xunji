@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "xunji"
+    MINIO_REGION: str = "us-east-1"
     MINIO_SECURE: bool = False
     MINIO_URL_EXPIRE_HOURS: int = 168  # 7 days default
     MINIO_SENSITIVE_EXPIRE_HOURS: int = 1  # 1 hour for sensitive

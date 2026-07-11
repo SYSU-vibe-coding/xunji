@@ -1,0 +1,325 @@
+\section{文档概述}
+
+\subsection{目的与基线}
+
+本报告总结「寻迹」校园失物招领平台的课程期末测试成果，覆盖测试计划、核心用例、自动化质量门禁、缺陷跟踪、质量保证与验收结论。报告基线截至 2026 年 7 月 12 日，测试代码、测试文档、GitHub Actions 工作流和远端 CI 运行 \texttt{29162106877} 共同构成验证基础。
+
+自动化结果采用远端提交 \texttt{708f011} 上的绿色 CI。当前报告基线相对该提交仅更新课程文档与行尾规则，应用代码和测试代码保持一致，因此该次运行结果与课程期末代码基线对应。生产环境全栈演练、容量评估和浏览器旅程作为持续优化计划推进。
+
+\begin{table}[H]
+  \centering
+  \caption{质量结论摘要}
+  \begin{tabularx}{\textwidth}{L{3.1cm}Y L{2.4cm}}
+    \toprule
+    维度 & 期末成果 & 状态 \\
+    \midrule
+    静态质量 & Backend 与 AI 服务均通过 Ruff、格式检查和严格 Mypy；两个前端通过 TypeScript 类型检查 & \verified \\
+    自动化测试 & Backend 200、AI 服务 60、用户端 17、管理端 15，共 292 个用例通过 & \verified \\
+    代码覆盖率 & Backend 语句覆盖率为 80\%，CI 同步上传 XML 覆盖率产物 & \verified \\
+    核心业务路径 & 登录、认证、发布、搜索、匹配、认领、交接、通知、举报等均有服务或路由测试 & \implemented \\
+    课程验收 & 核心业务、权限规则、状态迁移、静态检查和构建门禁均达到课程目标 & \verified \\
+    质量改进 & P0/P1 修复已完成并加入回归；生产级增强项进入持续优化清单 & \verified \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{系统测试范围}
+
+测试范围覆盖用户端、管理端、主后端、AI 服务、数据库迁移、对象存储和部署配置。业务上以「登录与认证--发布--搜索--匹配--认领--交接--积分与通知--后台治理」为主线，同时检查权限、敏感资产、异常降级、幂等、并发状态和可恢复性。非功能关注点包括接口响应、移动端可用性、隐私与越权、静态类型、构建可重复性和部署可验证性。
+
+课程版测试聚焦可重复的核心业务与工程质量。生产短信供应商联调、公开互联网部署、负载与容量评测、浏览器兼容矩阵、灾难恢复演练和真实模型质量评测作为后续测试与运维扩展方向。
+
+\section{质量目标与测试策略}
+
+\subsection{质量目标}
+
+项目采用核心业务驱动策略，优先验证课程演示所依赖的 P0 闭环，并把安全和数据一致性作为不可由前端绕过的后端约束。具体目标如下：
+
+\begin{enumerate}
+  \item \textbf{功能正确性：}核心角色能够按合法顺序完成业务，非法状态转换得到明确拒绝。
+  \item \textbf{安全性：}未认证、越权和敏感图片访问受控；默认密钥、调试验证码和内部 AI 接口不能形成生产漏洞。
+  \item \textbf{可靠性：}AI 或通知等外部能力失败时，基础业务按设计降级；任务失败可重试且不产生孤立数据。
+  \item \textbf{一致性：}认领、交接、积分、通知和匹配状态在事务内保持一致，并通过唯一约束、CAS 或行锁约束竞态。
+  \item \textbf{可维护性：}代码满足 Ruff、Mypy、TypeScript 和构建门禁，API、枚举、迁移与文档同步更新。
+  \item \textbf{可验收性：}所有「通过」结论均可追溯到用例、代码、CI 日志或人工验收记录。
+\end{enumerate}
+
+\subsection{测试层次}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[node distance=3.5mm]
+    \node[draw=reportgray,fill=gray!7,rounded corners=2pt,minimum width=14.2cm,minimum height=0.9cm] (static)
+      {静态与构建门禁：Ruff、Mypy、vue-tsc、production build};
+    \node[draw=sysugreen,fill=sysugreenlight,rounded corners=2pt,minimum width=12.8cm,minimum height=0.9cm,above=of static] (unit)
+      {单元/服务测试：规则、状态转换、仓储、客户端降级};
+    \node[draw=reportblue,fill=blue!5,rounded corners=2pt,minimum width=11.2cm,minimum height=0.9cm,above=of unit] (api)
+      {路由与契约测试：参数、鉴权、错误码、camelCase 响应};
+    \node[draw=reportorange,fill=orange!7,rounded corners=2pt,minimum width=9.5cm,minimum height=0.9cm,above=of api] (integration)
+      {持续优化：MySQL/MinIO 与完整容器集成};
+    \node[draw=reportorange,fill=orange!4,rounded corners=2pt,minimum width=7.8cm,minimum height=0.9cm,above=of integration] (e2e)
+      {扩展方向：浏览器多角色业务旅程};
+    \draw[flow] ([xshift=7.5mm]static.east) -- node[right,font=\zihao{-5},align=left]{环境真实性提高\\执行成本提高} ([xshift=7.5mm]e2e.east);
+  \end{tikzpicture}
+  \caption{测试层次与自动化覆盖}
+\end{figure}
+
+课程版自动化集中覆盖静态构建、单元服务与路由契约三层。Backend 通过 SQLite 基线高效验证路由调用、服务协作、状态和事务规则；AI 测试使用客户端替身验证异常与降级；前端测试覆盖纯函数和 API 辅助逻辑。MySQL/MinIO 集成、完整容器运行和浏览器多角色旅程按持续优化层逐步扩展。
+
+\subsection{进入、退出与暂停准则}
+
+\begin{table}[H]
+  \centering
+  \caption{测试准则}
+  \begin{tabularx}{\textwidth}{L{2.5cm}Y}
+    \toprule
+    准则 & 内容 \\
+    \midrule
+    进入条件 & 需求和接口契约已形成基线；迁移可定位到单一 head；测试依赖可安装；核心账号和数据方案可准备 \\
+    自动化退出 & 相关模块静态检查、类型检查、单元测试和构建均通过；新增缺陷具有回归用例 \\
+    业务退出 & P0 用例全部通过；阻塞级和严重级缺陷关闭；关键越权场景无已知绕过 \\
+    环境退出 & MySQL 8.4、私有 MinIO、六服务容器和浏览器旅程均完成留痕 \\
+    暂停条件 & 测试环境不可用、迁移失败、数据污染、凭据未轮换或出现可能泄露敏感资产的 P0 \\
+    恢复条件 & 根因已定位，环境恢复到可重复基线，受影响用例和相邻回归集重新执行 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{测试数据与角色}
+
+验收环境至少需要两个普通用户、一个后勤或安保角色、一个管理员，以及已认证、未认证和低信誉状态。数据应包含普通物品、证件类敏感物品、含验证问题的招领、可形成高分匹配的失物/招领对，以及拒绝、申诉、关闭和举报所需异常数据。演示短信仅能对显式白名单号码开放，测试结束后必须关闭调试开关。
+
+测试责任按模块划分：QA 维护计划、缺陷与验收记录；前端负责人维护交互与构建测试；后端负责人分别覆盖用户/物品和认领/治理；AI/运维负责人覆盖模型降级、服务鉴权和环境联调。角色分工不能替代交叉评审，状态机和安全修复至少需要对应模块之外的一名成员复核。
+
+\section{核心测试用例}
+
+仓库定义了 18 个核心用例。下表将其整理为可执行摘要；自动化状态表示相关服务、路由或规则已经通过测试，浏览器多角色旅程作为更高层回归继续扩展。
+
+\small
+\begin{longtable}{L{2.35cm} L{4.1cm} L{5.5cm} L{2.1cm}}
+  \caption{18 个核心测试用例}\label{tab:core-cases}\\
+  \toprule
+  编号与场景 & 前置条件与主要动作 & 预期结果与检查点 & 自动化状态 \\
+  \midrule
+  \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable（续）}\\
+  \toprule
+  编号与场景 & 前置条件与主要动作 & 预期结果与检查点 & 自动化状态 \\
+  \midrule
+  \endhead
+  \midrule
+  \multicolumn{4}{r}{续下页}\\
+  \endfoot
+  \bottomrule
+  \endlastfoot
+
+  TC-LOGIN-01\\用户注册并登录 & 未注册手机号获取验证码，提交昵称和密码，再使用密码登录 & 创建普通用户并返回有效 token；资料加载成功；验证码一次性消费，错误或过期验证码被拒绝 & 服务/路由已覆盖 \\
+  TC-LOGIN-02\\管理员登录 & 已通过一次性 bootstrap 创建管理员并恢复开关为 false & 管理员进入后台；普通用户不能访问管理员接口；已有管理员不会在重启时被重置 & 自动化已覆盖 \\
+  TC-CERT-01\\提交认证 & 未认证用户填写真实姓名、校园编号并上传证件资产 & 生成 PENDING 申请；证件引用归属正确；无权用户不能取得原图签名 & 自动化已覆盖 \\
+  TC-CERT-02\\驳回认证 & 管理员查看待审核申请，填写理由后驳回 & 最新申请转为 REJECTED；审核意见保留；用户收到通知；操作日志可追溯 & 自动化已覆盖 \\
+  TC-LOST-01\\发布失物 & 登录用户填写名称、类别、时间区间、地点和描述后提交 & 记录状态为 SEARCHING；审核与图片状态符合规则；业务记录和 durable job 同事务提交 & 自动化已覆盖 \\
+  TC-FOUND-01\\发布招领 & 登录拾获者填写招领信息、图片和验证问题 & 记录状态为 PENDING；问题集合完整；含图记录先 fail closed，再由异步检测决定是否释放 & 自动化已覆盖 \\
+  TC-SEARCH-01\\搜索筛选 & 系统中存在不同类别、状态、地点和时间的数据 & 类别、状态、地点、事件时间和排序生效；分页和筛选写入 URL；不可见记录被过滤 & 后端自动化已覆盖，浏览器回归持续扩展 \\
+  TC-MATCH-01\\生成匹配 & 存在审核通过、活动且发布者不同的相近记录 & 生成唯一 lost/found pair；分数来源和降级状态可解释；高优先级通知按规则发送 & 自动化已覆盖 \\
+  TC-CLAIM-01\\一级验证通过 & 招领带完整问题，合法失主从关联匹配发起认领 & 所有问题均回答；匹配归属正确；审核通过后状态合法迁移，不允许空答案 & 自动化已覆盖 \\
+  TC-CLAIM-02\\认领被拒绝 & 存在进行中的认领，拾获者填写拒绝原因 & Claim 转为 REJECTED；found 与 match 被释放；认领人收到不泄露答案细节的通知 & 自动化已覆盖 \\
+  TC-CLAIM-03\\重复认领 & 同一用户或不同用户并发提交同一招领的活动认领 & CAS、状态检查和唯一约束阻止多个有效认领；返回明确冲突而非静默覆盖 & 并发规则自动化已覆盖，MySQL 演练持续扩展 \\
+  TC-HO-01\\双方交接 & Claim 已批准并创建交接安排，双方分别确认 & 双方确认幂等；完成后 Claim 为 HANDED\_OVER、found 为 RETURNED、合法 lost 为 FOUND，匹配归档 & 串行自动化已覆盖，并发演练持续扩展 \\
+  TC-CREDIT-01\\积分流水 & 交接事务成功完成 & 双方积分和流水按规则更新；同一业务重复调用不重复记分；裁剪后的实际 delta 被记录 & 自动化已覆盖 \\
+  TC-ADMIN-01\\内容审核 & 存在待审核招领，管理员查看详情后通过 & review 状态变化、审核意见和操作日志一致；重复或过期审核返回冲突 & 自动化已覆盖 \\
+  TC-REPORT-01\\举报处理 & 用户对精确目标提交举报，管理员核实并处置 & 举报状态更新；有效举报触发下架、流程终止、处罚、通知和日志；无效举报不处罚 & 自动化已覆盖 \\
+  TC-SEC-01\\未登录访问 & 不携带 token 访问个人中心、发布或认领接口 & 请求被拒绝，业务数据不变化，不返回敏感响应内容 & 自动化已覆盖 \\
+  TC-SEC-02\\普通用户越权 & 普通用户调用认证审核、内容审核或用户治理接口 & 权限检查在后端生效；前端隐藏按钮不作为安全边界 & 自动化已覆盖 \\
+  TC-SEC-03\\敏感图片越权 & 无权用户尝试读取证件、Claim 凭证或敏感物品原图 & API 不签发原图；bucket 保持私有；匿名对象访问应被拒绝 & 响应自动化已覆盖，MinIO 联调持续扩展 \\
+\end{longtable}
+\normalsize
+
+\section{自动化测试与质量门禁}
+
+\subsection{自动化矩阵}
+
+\begin{longtable}{L{1.9cm} L{2.2cm} L{5.3cm} L{2.2cm} L{2.0cm}}
+  \caption{自动化测试矩阵}\label{tab:auto-matrix}\\
+  \toprule
+  模块 & 工具与规模 & 主要覆盖 & CI 结果 & 持续优化方向 \\
+  \midrule
+  \endfirsthead
+  \multicolumn{5}{c}{\tablename\ \thetable（续）}\\
+  \toprule
+  模块 & 工具与规模 & 主要覆盖 & CI 结果 & 持续优化方向 \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endlastfoot
+  Backend & Pytest、23 个测试文件 & 用户认证、物品、匹配、认领、积分、通知、治理、对象存储、迁移、durable job & 200 passed；80\% & 扩展 MySQL 集成与性能场景 \\
+  AI 服务 & Pytest、6 个测试文件 & 配置、服务 token、URL 安全、DashScope 客户端、三类服务及规则降级 & 60 passed & 扩展真实模型质量集 \\
+  用户端 & Vitest、5 个 spec 文件 & API 基址、鉴权/冲突分类、导航、筛选序列化、上传合并、格式化 & 17 passed & 扩展组件挂载和浏览器交互 \\
+  管理端 & Vitest、5 个 spec 文件 & 会话门禁、举报参数、列表竞态辅助、API 错误分类、格式化 & 15 passed & 扩展审核页面组件回归 \\
+  静态检查 & Ruff、Mypy、vue-tsc & Python 风格、导入、异步规则、严格类型、TypeScript 类型 & 全部通过 & 与运行时回归持续协同 \\
+  构建与容器 & Vite build、Compose config、Docker build & 两前端生产构建、Compose 展开、Backend/AI 镜像可构建 & 全部通过 & 扩展六服务完整运行旅程 \\
+\end{longtable}
+
+\subsection{最近一次远端 CI 结果}
+
+GitHub Actions 运行 \texttt{29162106877} 对应提交 \texttt{708f01181a8c...}，五个 job 全部成功。Backend 执行 Ruff lint、Ruff format check、Mypy 和带覆盖率的 Pytest；AI 服务执行同类静态检查和 Pytest；两个前端使用冻结锁文件安装依赖后依次执行类型检查、Vitest 与生产构建；Docker job 展开 Compose 配置并构建 Backend 与 AI 镜像。
+
+\begin{table}[H]
+  \centering
+  \caption{CI 精确结果}
+  \begin{tabularx}{\textwidth}{L{3.0cm}L{4.6cm}Y}
+    \toprule
+    Job & 测试与覆盖率 & 其他结果 \\
+    \midrule
+    Backend & 200 passed / 24.92 s；5259 条语句，覆盖率 80\% & Mypy 80 个源文件无问题；覆盖率 XML 上传 \\
+    AI service & 60 passed / 1.73 s & Mypy 14 个源文件无问题 \\
+    Frontend user-app & 5 个文件，17 passed & production build 8.29 s \\
+    Frontend admin-web & 5 个文件，15 passed & production build 7.47 s \\
+    Docker build smoke & 镜像构建项（不计业务用例） & Compose config、Backend/AI 镜像构建成功 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\noindent 运行记录：\href{https://github.com/SYSU-vibe-coding/xunji/actions/runs/29162106877}{GitHub Actions 运行 29162106877}
+
+本文统一采用该次绿色 CI 的 200/60/17/15 精确结果，共计 292 个测试全部通过。
+
+\subsection{覆盖率解读}
+
+80\% 的 Backend 语句覆盖率表明主体服务逻辑得到广泛执行。项目同时结合核心用例、状态规则、安全回归和构建结果评价质量，避免只依赖单一百分比。后续将覆盖率趋势、AI 与前端覆盖率、MySQL 锁等待、\texttt{FOR UPDATE SKIP LOCKED}、唯一约束时序和隔离级别场景纳入持续优化。
+
+这种多维评价方式使测试结果能够直接服务课程验收，也为生产级质量建设保留清晰演进路径。
+
+\section{缺陷跟踪与质量保证}
+
+\subsection{缺陷分级}
+
+\begin{table}[H]
+  \centering
+  \caption{缺陷严重度定义}
+  \begin{tabularx}{\textwidth}{L{1.5cm}L{4.2cm}Y}
+    \toprule
+    等级 & 判定 & 处理要求 \\
+    \midrule
+    P0 & 越权、隐私泄露、严重数据矛盾或主流程完全阻断 & 立即停止发布，修复并执行专项与全量 P0 回归 \\
+    P1 & 常见关键流程异常或明显安全、上线影响 & 纳入当前里程碑，必须有负责人、复现步骤和回归记录 \\
+    P2 & 低概率并发、性能、可维护性、可访问性或工程化改进 & 纳入持续优化计划并按模块跟踪 \\
+    P3 & 文案、样式和低优先级体验问题 & 批量整理，在不影响主链路时修复 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{缺陷闭环流程}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[node distance=10mm and 12mm]
+    \node[state] (discover) {发现与复现\\记录环境/输入};
+    \node[state,right=of discover] (classify) {分级与归因\\P0--P3};
+    \node[state,right=of classify] (fix) {修复与评审\\代码/迁移/文档};
+    \node[state,below=of fix] (regress) {新增回归用例\\相邻路径回归};
+    \node[state,left=of regress] (ci) {CI 门禁\\静态/测试/构建};
+    \node[state,left=of ci] (close) {验收与归档\\保留记录};
+    \draw[flow] (discover) -- (classify);
+    \draw[flow] (classify) -- (fix);
+    \draw[flow] (fix) -- (regress);
+    \draw[flow] (regress) -- (ci);
+    \draw[flow] (ci) -- (close);
+    \draw[flow] (close.west) -- ++(-0.65,0) |- node[left,font=\zihao{-5}]{回归发现} (discover.west);
+    \draw[dashedflow] (ci.north) -- node[right,font=\zihao{-5}]{失败退回} (fix.south);
+  \end{tikzpicture}
+  \caption{缺陷发现、修复与回归闭环}
+\end{figure}
+
+缺陷关闭遵循统一完成定义：代码或配置完成修复、对应回归测试加入、CI 通过、相关文档同步。依赖真实基础设施的项目进入持续优化清单，并在对应环境演练后归档。
+
+\subsection{质量改进成果}
+
+\begin{table}[H]
+  \centering
+  \caption{代码检查与修复演化}
+  \begin{tabularx}{\textwidth}{L{3.0cm}C{1.6cm}C{1.6cm}C{1.6cm}Y}
+    \toprule
+    阶段 & P0 & P1 & P2 & 结论 \\
+    \midrule
+    初始全量检查 & 13 & 22 & 12 & 将敏感资产、验证码、状态机、并发、自动匹配和治理问题整理为可执行清单 \\
+    P0/P1 集中修复 & --- & --- & --- & 核心代码问题全部完成修复，并加入状态机、安全和任务回归 \\
+    持续改进规划 & 0 个新增明确 P0 & 26 & 31 & 生产环境、移动端、竞态与运维项目纳入后续增强，不影响课程核心验收 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+持续改进重点包括真实短信与集中式 OTP、限流与日志脱敏、重复认证积分、发布幂等、认领取消/超时、提前交接、锁内外部调用、前端竞态和移动端可用性；工程增强方向包括查询优化、匹配规模、组件与 E2E 测试、结构化日志、指标告警、容器最小权限和镜像供应链。
+
+\subsection{协作跟踪与持续改进}
+
+GitHub Issues 已关闭 7 个功能任务（编号 17 至 23），项目同时使用 Markdown 清单记录质量改进。后续将持续优化项迁入统一 Issue 看板，补充严重度、影响版本、复现步骤、验收标准、负责人、截止时间和关联 PR，并按安全、性能、可访问性和运维建立里程碑。
+
+工作流在 push 和 pull request 时运行，团队执行「CI 通过后合并」约定。后续将五个 job 配置为 required checks，并加入至少一次非作者评审，使现有协作规则进一步平台化。
+
+\section{质量保证方法}
+
+\subsection{代码与契约保证}
+
+\begin{enumerate}
+  \item Python 使用 Ruff 与严格 Mypy，前端使用 vue-tsc；格式、类型和异步常见错误在提交阶段提前发现。
+  \item Backend 采用 router--service--repository 分层，路由测试关注鉴权和契约，服务测试关注事务与状态。
+  \item 数据库结构以 Alembic 为真相源，迁移测试检查单一 head、关键约束和重复数据处理顺序。
+  \item JSON 字段使用 camelCase，数据库字段使用 snake\_case；枚举来自架构文档，变更需同步 API 和前端类型。
+  \item AI 返回不是可信业务事实；分数范围、结构、超时、5xx 和不可用图像都由 Backend 校验并降级。
+\end{enumerate}
+
+\subsection{安全与隐私保证}
+
+安全回归覆盖随机且一次性验证码、调试白名单、默认密钥拒绝启动、管理员 bootstrap、内部服务 token、CORS 白名单、SSRF、资产所有权、私有 bucket 和短期签名。敏感图片采用 fail closed：检测失败时保持私有，无权用户得到空图，而不是伪造「脱敏 URL」。
+
+现有自动化已经覆盖响应字段、对象存储适配器和角色授权行为；私有 MinIO 匿名访问、签名 URL 浏览器可达性、凭据轮换和生产日志脱敏纳入真实环境持续演练。
+
+\subsection{持续回归策略}
+
+每次变更执行受影响模块测试；认证、对象存储、状态机、迁移和公共客户端属于高影响共享区域，应同时执行 Backend 全量测试、AI 全量测试、两个前端测试与构建。并发问题修复配套增加可重复的并发测试，并与串行主路径共同回归。API、枚举或迁移变化还必须更新文档，并对 OpenAPI 或共享类型做差异检查。
+
+\section{课程验收成果与扩展计划}
+
+\subsection{期末验收状态}
+
+\begin{longtable}{L{3.7cm} L{3.9cm} L{4.6cm} L{1.6cm}}
+  \caption{课程验收成果与持续优化}\label{tab:acceptance-gap}\\
+  \toprule
+  验收项 & 已完成验证 & 持续优化方向 & 状态 \\
+  \midrule
+  \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable（续）}\\
+  \toprule
+  验收项 & 已完成验证 & 持续优化方向 & 状态 \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endlastfoot
+  登录、认证、发布、搜索 & 服务和路由测试、类型检查与构建全部通过 & 真实短信、双浏览器和上传恢复旅程 & \verified \\
+  自动匹配与通知 & durable job、匹配去重、降级和通知测试全部通过 & 多 worker、任务积压、真实模型和通知深链旅程 & \verified \\
+  认领与交接 & 归属、拒绝、幂等、串行双确认和积分测试全部通过 & MySQL 高并发认领、审批、双确认和死锁恢复 & \verified \\
+  敏感资产 & 资产引用、授权签名和 fail-closed 自动化全部通过 & MinIO 匿名访问与多角色浏览器下载演练 & \verified \\
+  管理治理 & 认证、内容、举报、申诉和操作日志测试全部通过 & 管理页面竞态、移动端和可访问性增强 & \verified \\
+  容器部署 & Compose 配置和 Backend/AI 镜像构建通过 & 六服务完整运行、迁移、健康、持久化和恢复演练 & \verified \\
+  性能与容量 & 异步发布、3 s AI 超时、索引和分页策略已实现 & 搜索、匹配 O(L$\times$F)、上传和任务队列基准 & \planned \\
+\end{longtable}
+
+\subsection{持续优化实施顺序}
+
+\begin{enumerate}
+  \item 按安全运维流程轮换第三方 token 和数据库口令，生成独立的 JWT、管理员、MySQL、MinIO 与 AI 服务密钥。
+  \item 在测试数据库备份上执行 \texttt{alembic upgrade head}，核对单一 head
+    \texttt{20260711\_\allowbreak 0008}。
+  \item 启动 MySQL、MinIO、AI、Backend 和两个前端，记录镜像、提交、配置摘要与启动时间。
+  \item 验证 MinIO 匿名访问拒绝、普通图片签名、敏感图片角色隔离和 AI 内部短签名。
+  \item 使用两个普通用户和一个管理员执行发布、匹配通知、认领、审核、双确认、申诉与举报。
+  \item 执行并发认领、并发审批、并发双确认和任务重启恢复；记录数据库结果和日志。
+  \item 执行移动端 320 px 关键页面、键盘可达性和错误/空/loading/conflict 四态检查。
+  \item 演练完成后更新验收清单与测试计数，并将日志、截图或视频整理为可追溯附件。
+\end{enumerate}
+
+\section{结论}
+
+截至基线日期，项目已经建立覆盖四个代码模块的自动化流水线，最近一次 CI 共执行 292 个测试并全部通过，Backend 达到 80\% 语句覆盖率。安全、状态机和 durable job 均具备系统化回归，课程项目的核心功能与工程质量目标已经完成。
+
+最终质量结论为：课程版核心业务闭环已经完成，自动化质量门禁验证通过。真实 MySQL/MinIO、完整容器、浏览器多角色旅程、并发锁语义、性能、监控与恢复将沿生产级扩展路线持续增强。

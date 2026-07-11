@@ -50,6 +50,9 @@ docs/presentation/
 *.lol
 _minted-*/
 
+# Final course-report deliverables are versioned with their LaTeX sources.
+!report/**/*.pdf
+
 # Env
 .env
 .env.*

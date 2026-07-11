@@ -1,0 +1,433 @@
+\section{建模目标与方法}
+
+\subsection{文档定位}
+
+本报告以 2026 年 7 月 12 日仓库为建模基线，完成用例图、领域类图、序列图和状态图四类模型，分别表达「谁使用系统」「核心对象如何关联」「一次业务如何协作」和「哪些状态迁移合法」。四种视图共同覆盖页面、API、service、repository、数据库与测试，完整描述从发布、匹配、认领到交接结案的核心业务闭环。
+
+模型遵循两个原则：第一，\textbf{核心模型与扩展设计分层}。四张图采用课程成果对应的 schema/model，\term{custodianId}、\term{itemVersion}、\term{algorithmVersion} 等增强字段统一归入扩展方向。第二，\textbf{逻辑关联与物理实现分层}。领域类图表达业务关联和基数，ORM 通过 ID、repository join 和 service 守卫落实聚合关系与状态约束。
+
+\subsection{四类模型视图说明}
+
+\begin{table}[H]
+  \centering
+  \caption{四类模型的表达重点与实现落点}
+  \begin{tabularx}{\textwidth}{L{2.4cm} L{4.2cm} Y}
+    \toprule
+    视图 & 回答的问题 & 实现落点 \\
+    \midrule
+    用例图 & 哪类参与者可以完成哪些目标 & \path{requirements-baseline.md}、前端 router、后端 router 与角色依赖 \\
+    领域类图 & 核心实体、属性、基数和聚合边界是什么 & 各模块 \path{models.py}、数据库迁移、schema 与 repository join \\
+    发布匹配序列图 & 发布、持久化任务、AI、匹配和通知按何顺序提交 & ItemService、DurableJobRunner、MatchService、AIClient \\
+    认领状态图 & 哪些认领迁移合法，迁移时关联实体如何变化 & ClaimService、ClaimRepository、枚举字典与状态迁移测试 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{系统边界与用例模型}
+
+\subsection{参与者定义}
+
+访客在当前用户端只能注册和登录；普通用户在不同业务情境中扮演失主或拾获者，并可读取已发布公告。公告后端读取 API 本身无鉴权，但前端路由位于登录守卫之下，因此图中按可操作的端到端入口建模。STAFF 是具备批量登记能力的后勤/安保角色；ADMIN 使用独立管理端完成审核和治理。AI 服务和对象存储属于受主后端控制的外部技术参与者，不直接面向浏览器暴露内部业务接口。
+
+\subsection{用例图}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[x=1cm,y=1cm]
+    \draw[thick,rounded corners=4pt,color=sysugreen] (2,1.0) rectangle (16,-11.5);
+    \node[anchor=west,font=\bfseries\large,color=sysugreen] at (2.3,0.4) {寻迹系统边界};
+
+    \draw[draw=linegray,dashed,rounded corners=3pt,fill=gray!2] (2.7,0) rectangle (15.3,-7.35);
+    \node[anchor=west,font=\scriptsize\bfseries,color=reportgray] at (2.95,-0.25) {用户端功能};
+    \draw[draw=linegray,dashed,rounded corners=3pt,fill=gray!2] (2.7,-7.8) rectangle (8.8,-11.05);
+    \node[anchor=west,font=\scriptsize\bfseries,color=reportgray] at (2.95,-8.05) {STAFF 扩展};
+    \draw[draw=linegray,dashed,rounded corners=3pt,fill=gray!2] (9.15,-7.8) rectangle (15.3,-11.05);
+    \node[anchor=west,font=\scriptsize\bfseries,color=reportgray] at (9.4,-8.05) {ADMIN 治理};
+
+    \node[actor] (visitor) at (0,-1.2) {访客};
+    \node[actor] (user) at (0,-4.55) {普通用户\\失主/拾获者};
+    \node[actor] (staff) at (0,-9.45) {STAFF\\后勤/安保};
+    \node[actor] (admin) at (18,-9.45) {ADMIN\\管理员};
+
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (login) at (4.2,-1.2) {注册与登录};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (announcement) at (8.8,-1.2) {浏览公告};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (cert) at (13.4,-1.2) {认证与资料};
+
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (search) at (4.2,-2.9) {搜索与筛选};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (publishLost) at (8.8,-2.9) {发布失物};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (publishFound) at (13.4,-2.9) {发布招领};
+
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (match) at (4.2,-4.6) {查看/重算匹配};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (claim) at (8.8,-4.6) {发起并验证认领};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (handover) at (13.4,-4.6) {安排并确认交接};
+
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (notice) at (4.2,-6.3) {通知与积分};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (report) at (8.8,-6.3) {举报物品};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (myRecords) at (13.4,-6.3) {个人记录};
+
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (batch) at (5.75,-8.9) {批量录入招领};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (staffShared) at (5.75,-10.05) {发布招领/确认交接};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (review) at (12.25,-8.65) {认证/内容/申诉审核};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (govern) at (12.25,-9.65) {举报/用户/公告/审计};
+    \node[usecase,font=\scriptsize,inner xsep=2pt] (adminMatch) at (12.25,-10.6) {管理重算匹配};
+
+    \draw[flow] (visitor) -- (login);
+    \draw[draw=reportgray,thick] (user.east) -- (2.7,-4.55);
+    \draw[draw=reportgray,thick] (staff.east) -- (2.7,-9.45);
+    \draw[draw=reportgray,thick] (admin.west) -- (15.3,-9.45);
+
+    \draw[dashedflow] (publishLost) -- (match);
+    \draw[dashedflow] (publishFound) -- (match);
+    \draw[dashedflow] (claim) -- (handover);
+    \node[anchor=east,font=\tiny,color=reportgray] at (15,-7.05)
+      {虚线箭头：$\langle\!\langle$include$\rangle\!\rangle$};
+  \end{tikzpicture}}
+  \caption{寻迹系统当前实现用例图}
+  \label{fig:usecase}
+\end{figure}
+
+图 \ref{fig:usecase} 以分区表示各角色可操作的用例集合；STAFF 和 ADMIN 分区同时列出其共享业务入口，使角色边界和业务职责保持清晰。「发布包含匹配」表示发布事务写入持久化匹配任务，由后台 runner 完成匹配计算；「认领包含交接」表示审核达到 \term{APPROVED} 后进入交接子流程。搜索入口位于登录守卫之内，因此访客连接注册登录，普通用户承担搜索、发布和认领等业务目标。
+
+\subsection{核心用例规约}
+
+\small
+\begin{longtable}{L{1.4cm} L{2.2cm} L{3.4cm} L{4.5cm} L{2.4cm}}
+  \caption{核心用例的前置、主成功场景与结果}\label{tab:usecases}\\
+  \toprule
+  编号 & 用例 & 前置条件 & 主成功场景 & 后置条件/异常 \\
+  \midrule
+  \endfirsthead
+  \toprule
+  编号 & 用例 & 前置条件 & 主成功场景 & 后置条件/异常 \\
+  \midrule
+  \endhead
+  UC-01 & 注册登录 & 合法手机号；注册时有有效验证码 & 校验参数和验证码/密码，查询 ACTIVE 用户，签发 JWT & 管理员禁止验证码登录；禁用/注销用户拒绝建立会话 \\
+  UC-02 & 发布失物 & 用户已登录；资产属于本人 LOST 空间 & 保存失物、图片、日志和 MATCH/CLASSIFY 任务后提交 & 返回 SEARCHING；重复指纹、非法资产或事务失败不产生半成品 \\
+  UC-03 & 发布招领 & 用户已登录；字段、问题与图片合规 & 保存招领、图片、问题和任务；含图片先视为敏感 & 返回 PENDING；CERT 始终敏感，AI 失败保持保护 \\
+  UC-04 & 查看匹配 & 用户拥有匹配任一侧物品 & 查询按得分排序结果，查看详情时 NEW 转 READ & 非参与方禁止访问；失效结果仍可表达终态但不可认领 \\
+  UC-05 & 发起认领 & found=PENDING、审核通过、双方 ACTIVE、信誉不冻结 & 锁定对象，校验 match 归属，判定等级，验证问答/凭证并原子占用 found & 成功进入处理状态并通知拾获者；问答失败保留失败记录但不占用 found \\
+  UC-06 & 审核认领 & 操作者为发布者或管理员；claim 可审核 & 检查凭证与状态，APPROVE 或 REJECT，记录原因、通知和日志 & 拒绝后无其他活动认领则 found 回到 PENDING，match 释放 \\
+  UC-07 & 交接结案 & claim 为 APPROVED、found 为 CLAIMING，且存在唯一交接 & 双方分别确认；第二个确认在锁内触发结案 & 认领完成、招领归还；合法关联失物标记找回；积分、通知和日志同事务 \\
+  UC-08 & 举报处置 & 举报目标精确存在；同一举报人未重复举报 & 管理员核实目标，执行有效/无效结论 & 有效时下架、终止活动流程、扣分并通知；CAS 冲突拒绝覆盖 \\
+  \bottomrule
+\end{longtable}
+\normalsize
+
+\section{领域类模型}
+
+\subsection{领域类图}
+
+\tikzset{
+  umlclass/.style={
+    rectangle split,
+    rectangle split parts=2,
+    draw=reportblue,
+    thick,
+    fill=blue!3,
+    rounded corners=1pt,
+    text width=3.25cm,
+    minimum height=1.15cm,
+    align=left,
+    font=\scriptsize
+  },
+  association/.style={draw=reportgray,thick},
+  dependency/.style={draw=reportgray,thick,dashed,-{Latex[length=2mm]}}
+}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[x=1cm,y=1cm]
+    \node[umlclass] (user) at (0,0) {\centering\textbf{User}\nodepart{second}
+      id, phone, passwordHash\\role, certStatus, status\\creditScore};
+    \node[umlclass] (lost) at (4.5,0) {\centering\textbf{LostItem}\nodepart{second}
+      id, userId, category\\lostTimeStart/End\\status, reviewStatus};
+    \node[umlclass] (found) at (9,0) {\centering\textbf{FoundItem}\nodepart{second}
+      id, userId, category\\foundTime, custodyType\\isSensitive, status};
+    \node[umlclass] (match) at (4.5,-4.0) {\centering\textbf{MatchResult}\nodepart{second}
+      id, lostItemId, foundItemId\\four scores, totalScore\\degraded, matchStatus};
+    \node[umlclass] (question) at (9,-4.0) {\centering\textbf{VerifyQuestion}\nodepart{second}
+      id, foundItemId\\questionText\\answerKeywords};
+    \node[umlclass] (claim) at (4.5,-8.0) {\centering\textbf{ClaimRequest}\nodepart{second}
+      id, matchId?, foundItemId\\claimantId, verifyLevel\\reviewStatus, reasons};
+    \node[umlclass] (answer) at (1.6,-11.8) {\centering\textbf{ClaimAnswer}\nodepart{second}
+      id, claimId, questionId\\questionText, answerText\\matchScore};
+    \node[umlclass] (handover) at (7.4,-11.8) {\centering\textbf{HandoverRecord}\nodepart{second}
+      id, claimId(unique)\\method, location, time\\owner/finderConfirmed};
+
+    \node[note,text width=4.1cm,font=\scriptsize] (support) at (12.7,-7.7) {
+      \textbf{配套实体（按键关联）}\\[2pt]
+      UserCertRequest、Notification\\
+      CreditLog、OperationLog\\
+      ItemImage、Report、DurableJob\\[2pt]
+      通过 userId 或 bizType/bizId 关联；所有权和不变量由聚合表统一说明。};
+
+    \draw[association] (user) -- node[above,font=\tiny,fill=white,inner sep=1pt] {发布 0..*} (lost);
+    \draw[association] (user) to[bend left=32] node[above,font=\tiny,fill=white,inner sep=1pt] {发布 0..*} (found);
+    \draw[association] (lost) -- node[left,font=\tiny,fill=white,inner sep=1pt] {1 : 0..*} (match);
+    \draw[association] (found) -- node[above,sloped,font=\tiny,fill=white,inner sep=1pt] {0..* : 1} (match);
+    \draw[association] (found) -- node[right,font=\tiny,fill=white,inner sep=1pt] {1 : 0..3} (question);
+    \draw[association] (match) -- node[left,font=\tiny,fill=white,inner sep=1pt] {0..1 : 历史 0..*} (claim);
+    \draw[association] (user.south) -- (0,-8.0) -- node[above,font=\tiny,fill=white,inner sep=1pt] {claimant 1 : 0..*} (claim.west);
+    \draw[association] (claim) -- node[above,sloped,font=\tiny,fill=white,inner sep=1pt] {1 : 0..*} (answer);
+    \draw[association] (claim) -- node[above,sloped,font=\tiny,fill=white,inner sep=1pt] {1 : 0..1} (handover);
+  \end{tikzpicture}}
+  \caption{核心领域类图（当前逻辑模型）}
+  \label{fig:class}
+\end{figure}
+
+\subsection{聚合与基数解释}
+
+\begin{longtable}{L{2.6cm} L{3.0cm} L{8.4cm}}
+  \caption{主要聚合、所有权与不变量}\label{tab:aggregates}\\
+  \toprule
+  聚合根 & 包含/关联对象 & 必须保持的不变量 \\
+  \midrule
+  \endfirsthead
+  \toprule
+  聚合根 & 包含/关联对象 & 必须保持的不变量 \\
+  \midrule
+  \endhead
+  User & 认证申请、发布、通知、积分、举报、日志 & phone 唯一；非 ACTIVE 用户不能建立新业务流程；角色由后端数据库复核 \\
+  LostItem & 图片、匹配和 LOST durable jobs & SEARCHING 且审核通过才参与匹配；关闭/找回后活动匹配失效 \\
+  FoundItem & 图片、验证问题、匹配、认领和 FOUND jobs & 最多 3 问；同时最多一个活动认领；敏感图默认保护 \\
+  MatchResult & 一对 lost/found 的当前评分与状态 & 数据库唯一约束保证一对最多一条；重算采用 upsert；历史认领可多次引用同一匹配 \\
+  ClaimRequest & 回答、凭证图片、唯一交接 & found 是占用锁根；审核、申诉和交接状态必须与 found/match 同步 \\
+  Report & 精确目标、处理状态与联动处罚 & 同一举报人对同一目标唯一；有效处理必须定位真实目标并在同一事务联动下架/扣分/通知 \\
+  DurableJob & 业务对象版本和执行状态 & jobType+bizType+bizId+bizVersion 唯一；旧版本幂等跳过；失败可重试和回收 \\
+  \bottomrule
+\end{longtable}
+
+图 \ref{fig:class} 聚焦发布、匹配、验证、认领与交接主链；配套实体面板与表 \ref{tab:aggregates} 完整承接认证、图片、通知、举报、任务、积分和审计关系。ItemImage、Notification、Report 和 DurableJob 使用「类型+ID」的多态业务引用，服务层在读取、锁定和状态转换时校验目标存在性。该建模方式保持聚合边界独立，并为后续按数据治理需要增强物理约束和删除策略预留空间。
+
+\section{发布到匹配序列模型}
+
+\subsection{序列图}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[x=1cm,y=1cm]
+    \tikzset{participant/.style={draw=sysugreen,thick,fill=sysugreenlight,rounded corners=2pt,minimum width=2.1cm,minimum height=0.75cm,font=\scriptsize}}
+
+    \node[participant] (u) at (0,0) {用户};
+    \node[participant] (fe) at (2.5,0) {用户端};
+    \node[participant] (api) at (5,0) {ItemService};
+    \node[participant] (os) at (7.5,0) {对象存储};
+    \node[participant] (db) at (10,0) {MySQL};
+    \node[participant] (runner) at (12.5,0) {JobRunner};
+    \node[participant] (ai) at (15,0) {AI 服务};
+    \node[participant] (notice) at (17.5,0) {通知服务};
+
+    \foreach \p in {u,fe,api,os,db,runner,ai,notice}
+      \draw[dashed,color=linegray] (\p.south) -- ++(0,-19.2);
+
+    \draw[flow] (0,-1.0) -- node[above,font=\scriptsize] {选择图片} (2.5,-1.0);
+    \draw[flow] (2.5,-2.0) -- node[above,font=\scriptsize] {POST /files/upload} (5,-2.0);
+    \draw[flow] (5,-3.0) -- node[above,font=\scriptsize] {校验格式、重编码并存储} (7.5,-3.0);
+    \draw[flow] (7.5,-4.0) -- node[above,font=\scriptsize] {assetRef} (5,-4.0);
+    \draw[flow] (5,-4.7) -- node[above,font=\scriptsize] {返回 assetRef} (2.5,-4.7);
+
+    \draw[flow] (0,-5.7) -- node[above,font=\scriptsize] {提交失物/招领表单} (2.5,-5.7);
+    \draw[flow] (2.5,-6.7) -- node[above,font=\scriptsize] {POST item + imageUrls} (5,-6.7);
+    \draw[flow] (5,-7.7) -- node[above,font=\scriptsize] {验证登录、字段、资产所有权} (7.5,-7.7);
+    \draw[flow] (7.5,-8.4) -- node[above,font=\scriptsize] {对象存在且归属正确} (5,-8.4);
+
+    \draw[flow] (5,-9.4) -- node[above,font=\scriptsize] {BEGIN；写 item/images/questions/log} (10,-9.4);
+    \draw[flow] (5,-10.4) -- node[above,font=\scriptsize] {写 MATCH、CLASSIFY；必要时 SENSITIVE} (10,-10.4);
+    \draw[flow] (10,-11.2) -- node[above,font=\scriptsize] {COMMIT} (5,-11.2);
+    \draw[flow] (5,-12.0) -- node[above,font=\scriptsize] {id,status,isSensitive?} (2.5,-12.0);
+    \draw[flow] (2.5,-12.7) -- node[above,font=\scriptsize] {发布成功} (0,-12.7);
+    \draw[dashedflow] (5,-13.3) -- node[above,font=\scriptsize] {BackgroundTasks 仅唤醒} (12.5,-13.3);
+
+    \draw[flow] (12.5,-14.2) -- node[above,font=\scriptsize] {SELECT ... FOR UPDATE SKIP LOCKED} (10,-14.2);
+    \draw[flow] (10,-14.9) -- node[above,font=\scriptsize] {置 RUNNING，提交领取} (12.5,-14.9);
+    \draw[flow] (12.5,-15.9) -- node[above,font=\scriptsize] {calculate-match(lost,found)} (15,-15.9);
+    \draw[flow] (15,-16.55) -- node[above,font=\scriptsize] {模型结果或 degraded} (12.5,-16.55);
+
+    \draw[dashed,color=reportorange,rounded corners=2pt] (11.7,-15.05) rectangle (15.8,-16.9);
+    \node[anchor=west,font=\scriptsize,color=reportorange] at (11.85,-15.25) {alt：AI 不可用则主后端规则降级};
+
+    \draw[flow] (12.5,-17.3) -- node[above,font=\scriptsize] {重锁并校验；score$\geq$70 时 upsert pair} (10,-17.3);
+    \draw[flow] (12.5,-18.0) -- node[above,font=\scriptsize] {订阅开启：创建 MATCH 通知} (17.5,-18.0);
+    \draw[flow] (17.5,-18.7) -- node[above,font=\scriptsize] {INSERT notification} (10,-18.7);
+    \draw[flow] (12.5,-19.4) -- node[above,font=\scriptsize] {job=COMPLETED；COMMIT} (10,-19.4);
+  \end{tikzpicture}}
+  \caption{失物/招领发布到异步匹配序列图}
+  \label{fig:sequence}
+\end{figure}
+
+\subsection{事务边界与返回语义}
+
+第一事务由发布请求持有，原子保存物品、图片/问题、日志和持久化任务。事务提交后 HTTP 返回物品 ID、业务状态以及招领的敏感标记，使物品与匹配任务保持一致。前端将「发布成功」和「匹配完成」作为两个独立阶段展示。
+
+第二事务由 runner 领取任务，使用 \term{FOR UPDATE SKIP LOCKED} 支持多 worker 互斥；领取后提交，实际执行再重新锁定任务和业务对象。匹配计算可能耗时，落库前必须重新验证 lost/found、审核状态、发布者状态和同人排除规则，避免计算期间物品被关闭或认领后写回过期结果。
+
+第三个原子边界是结果提交：匹配 pair 的 upsert、新匹配通知和任务 \term{COMPLETED} 在 runner 持有的同一会话事务提交。发生异常时整体回滚，runner 将任务重新置为 \term{PENDING} 并设置指数退避；达到最大次数转为 \term{FAILED}。进程退出遗留的 \term{RUNNING} 可在锁超时后被新进程回收。
+
+\subsection{AI 协作与安全约束}
+
+AI 服务返回内容经过主后端结构校验，总分由主后端根据可用维度统一归一。\term{imageAvailable=false} 时采用文本、结构化属性和规则维度完成匹配，配置模型后进一步增强文本相似度、视觉分类和敏感检测。AI 调用与发布事务解耦，调用超时或结果需复核时切换主后端规则计算；敏感检测仅在每张图片都明确安全时解除敏感标记，证件类别始终保持保护。
+
+\clearpage
+\section{认领状态模型}
+
+\subsection{状态图}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[x=1cm,y=1cm]
+    \node[circle,fill=reportgray,minimum size=0.34cm,inner sep=0pt] (start) at (0,0) {};
+    \node[decision,minimum width=1.8cm,minimum height=1.0cm,font=\scriptsize] (decide) at (1.8,0) {创建判定};
+
+    \node[state,font=\scriptsize] (answer) at (5.8,2.2) {ANSWER\_PASSED\\问答通过};
+    \node[state,font=\scriptsize] (proof) at (5.8,0) {PROOF\_PENDING\\待补凭证};
+    \node[state,font=\scriptsize] (pending) at (5.8,-2.2) {PENDING\\待人工审核};
+    \node[decision,minimum width=1.8cm,minimum height=1.0cm,font=\scriptsize] (review) at (9.6,0) {审核结论};
+    \node[state,font=\scriptsize,fill=green!6,draw=sysugreen] (approved) at (12.8,2.2) {APPROVED\\可交接};
+    \node[state,font=\scriptsize,fill=red!5,draw=reportred] (rejected) at (12.8,-2.2) {REJECTED\\已拒绝};
+    \node[state,font=\scriptsize,fill=green!6,draw=sysugreen] (handed) at (16.6,2.2) {HANDED\_OVER\\已交接};
+    \node[state,font=\scriptsize] (appeal) at (16.6,-2.2) {APPEALING\\申诉中};
+    \node[decision,minimum width=1.8cm,minimum height=1.0cm,font=\scriptsize] (appealreview) at (16.6,0) {管理员复核};
+    \node[circle,draw=reportgray,double,minimum size=0.48cm,inner sep=0pt] (end1) at (19.1,2.2) {};
+
+    \node[note,text width=6.2cm] (termnote) at (4.2,-5.3)
+      {任一活动态在物品关闭、举报下架或账号治理时进入终止态};
+    \node[state,font=\scriptsize,fill=gray!8,draw=reportgray] (terminated) at (12.8,-5.3) {TERMINATED\\流程终止};
+    \node[circle,draw=reportgray,double,minimum size=0.48cm,inner sep=0pt] (end2) at (15.6,-5.3) {};
+
+    \draw[flow] (start) -- (decide);
+    \draw[flow] (decide) -- node[above,sloped,font=\scriptsize,fill=white] {L1 通过；L2 有凭证} (answer);
+    \draw[flow] (decide) -- node[pos=0.4,above=2pt,font=\tiny,fill=white,inner sep=1pt] {L2/L3 缺凭证} (proof);
+    \draw[flow] (decide) -- node[below,sloped,font=\scriptsize,fill=white] {L3 有凭证} (pending);
+    \draw[flow] (decide.south) |- node[pos=0.68,below,font=\scriptsize,fill=white] {问答失败} ([yshift=-0.85cm]rejected.south) -- (rejected.south);
+
+    \draw[flow] (proof) -- node[right,font=\scriptsize,fill=white] {L2 补凭证} (answer);
+    \draw[flow] (proof) -- node[right,font=\scriptsize,fill=white] {L3 补凭证} (pending);
+    \draw[flow] (answer) -- node[above,sloped,font=\scriptsize,fill=white] {常规审核} (review);
+    \draw[flow] (pending) -- node[below,sloped,font=\scriptsize,fill=white] {人工审核} (review);
+    \draw[flow] (review) -- node[above,sloped,font=\scriptsize,fill=white] {通过} (approved);
+    \draw[flow] (review) -- node[below,sloped,font=\scriptsize,fill=white] {拒绝} (rejected);
+
+    \draw[flow] (rejected) to[bend right=18] node[below,font=\scriptsize,fill=white] {期限内申诉} (appeal);
+    \draw[flow] (appeal) -- (appealreview);
+    \draw[flow] (appealreview) -- node[above,sloped,font=\scriptsize,fill=white] {通过} (approved);
+    \draw[flow] (appealreview) -- node[below,sloped,font=\scriptsize,fill=white] {维持拒绝} (rejected);
+    \draw[flow] (approved) to[bend left=16] node[above,font=\scriptsize,fill=white] {双方确认} (handed);
+    \draw[flow] (handed) -- (end1);
+
+    \draw[dashedflow] (termnote) -- (terminated);
+    \draw[flow] (terminated) -- (end2);
+  \end{tikzpicture}}
+  \caption{认领请求状态图}
+  \label{fig:claim-state}
+\end{figure}
+
+\subsection{初始状态判定}
+
+状态不是固定从 \term{PENDING} 开始，而是由创建时验证结果直接决定。\term{LEVEL\_1} 问答通过进入 \term{ANSWER\_PASSED}；\term{LEVEL\_2} 问答通过但缺凭证进入 \term{PROOF\_PENDING}，已有凭证则进入 \term{ANSWER\_PASSED}；\term{LEVEL\_3} 缺凭证进入 \term{PROOF\_PENDING}，已有凭证仍需人工，进入 \term{PENDING}。一级/二级问答失败直接保存 \term{REJECTED} 记录并返回统一失败消息。
+
+\subsection{审核、申诉与终止}
+
+拾获者可审核本人招领的活动认领，管理员可以执行管理审核；\term{APPEALING} 只能由管理员复核。二级或三级认领缺少凭证时不能批准。拒绝后若无其他活动认领，found 从 \term{CLAIMING} 恢复 \term{PENDING}，关联 match 从 \term{CLAIMED} 释放为 \term{READ}。用户申诉时必须确认 found 仍可占用、双方账号活动且原 match 仍有效，然后重新把 found 占用为 \term{CLAIMING}。
+
+\term{TERMINATED} 与 \term{REJECTED} 语义不同：前者表示物品关闭、举报下架或账户治理导致流程无法继续，后者表示验证或审核结论不通过。终止活动认领时还必须失效 match、通知双方并写审计日志，避免 found、claim 和 handover 各自停留在互相矛盾的状态。
+
+\subsection{跨聚合迁移}
+
+\small
+\begin{longtable}{L{2.1cm} L{3.3cm} L{5.2cm} L{3.4cm}}
+  \caption{认领动作与跨实体原子变化}\label{tab:cross-state}\\
+  \toprule
+  动作 & 前置守卫 & 原子状态变化 & 必须副作用 \\
+  \midrule
+  \endfirsthead
+  \toprule
+  动作 & 前置守卫 & 原子状态变化 & 必须副作用 \\
+  \midrule
+  \endhead
+  发起认领 & found=PENDING 且审核通过；无活动认领；非本人招领；用户信誉合格 & 有效验证时 found$\rightarrow$CLAIMING，创建 claim；合法 match$\rightarrow$CLAIMED & 通知拾获者、写日志；失败问答不占用 found/match \\
+  拒绝认领 & claim 位于可审核状态；操作者有权 & claim$\rightarrow$REJECTED；无其他活动认领时 found$\rightarrow$PENDING，match$\rightarrow$READ & 保存拒绝原因、通知认领者、记录 old/new \\
+  提交申诉 & claim 为 REJECTED；found 可重新占用；申诉未提交过 & found$\rightarrow$CLAIMING；claim$\rightarrow$APPEALING；match$\rightarrow$CLAIMED & 高优通知管理员、写日志 \\
+  创建交接 & claim 为 APPROVED；found 为 CLAIMING；尚无 handover & 创建 claimId 唯一的 HandoverRecord & 通知双方；重复请求返回已有记录 \\
+  单方确认 & 对应参与方；claim 为 APPROVED；尚未结案 & 原子设置 owner/finder 确认位 & 写确认日志；重复确认保持幂等 \\
+  双方结案 & 两确认位均真；claim、found、match 仍有效 & claim$\rightarrow$HANDED\_OVER；found$\rightarrow$RETURNED；合法 lost$\rightarrow$FOUND & 双方积分、通知、完成时间和日志同事务 \\
+  关闭/下架 & found 活动或举报有效；操作者有权 & 活动 claim$\rightarrow$TERMINATED；found$\rightarrow$CLOSED；match$\rightarrow$EXPIRED & 通知参与者、治理日志；整体失败回滚 \\
+  \bottomrule
+\end{longtable}
+\normalsize
+
+\section{四视图的模型一致性}
+
+\subsection{角色到状态的闭环}
+
+用例图中的「发起并验证认领」落到类图的 ClaimRequest、ClaimAnswer、FoundItem 和 MatchResult；序列图中的异步匹配为该用例提供可选 \term{matchId} 上下文；状态图再约束该 ClaimRequest 可以执行的审核、申诉和交接动作。失主只有在 match 关联 lost 属于本人时才能以匹配上下文认领，拾获者只有在 found 属于本人时才能审核和以 FINDER 身份确认，管理员只能通过受角色依赖保护的管理接口复核申诉或执行治理。
+
+\subsection{类到事务的闭环}
+
+序列图第一事务对应 LostItem/FoundItem、ItemImage、VerifyQuestion、OperationLog 和 DurableJob；runner 事务对应 MatchResult、Notification 和 DurableJob。状态图的结案事务对应 ClaimRequest、HandoverRecord、FoundItem、可选 LostItem、MatchResult、CreditLog、Notification 与 OperationLog。四类模型对这些事务副作用采用相同对象和状态口径，使页面结果与关联实体同步变化。
+
+\subsection{枚举到页面的闭环}
+
+LostItem 使用 \term{SEARCHING}、\term{FOUND}、\term{CLOSED}；FoundItem 使用 \term{PENDING}、\term{CLAIMING}、\term{RETURNED}、\term{CLOSED}；MatchResult 使用 \term{NEW}、\term{READ}、\term{CLAIMED}、\term{EXPIRED}。ClaimRequest 使用图 \ref{fig:claim-state} 的八个状态。前端按钮和标签只能从这些权威值推导可执行动作；前端隐藏按钮不是权限保证，后端仍需验证操作者、资源所有权、源状态和关联状态。
+
+\section{模型口径与扩展方向}
+
+\small
+\begin{longtable}{L{1.3cm} L{4.3cm} L{4.7cm} L{3.7cm}}
+  \caption{核心主题的统一建模口径}\label{tab:drift}\\
+  \toprule
+  编号 & 模型主题 & 课程成果采用的实现口径 & 视图表达与扩展方向 \\
+  \midrule
+  \endfirsthead
+  \toprule
+  编号 & 模型主题 & 课程成果采用的实现口径 & 视图表达与扩展方向 \\
+  \midrule
+  \endhead
+  M-01 & 搜索入口与角色边界 & lost/found 列表 router 和用户端业务路由采用登录守卫 & 用例图将搜索归入普通用户功能，访客连接注册登录 \\
+  M-02 & 证件类认领 & ClaimService 对 CERT 采用 LEVEL\_3，要求凭证和人工审核 & 状态图展示凭证补充、人工审核和管理员复核路径 \\
+  M-03 & 认领终止语义 & 权威枚举、schema、service 和前端类型统一使用 \term{TERMINATED} & 状态图将其建模为治理或物品关闭触发的正式终止态 \\
+  M-04 & 发布与异步匹配 & 创建响应返回物品状态；\term{durable\_jobs} 写入 \term{job\_type=MATCH} & 序列图分开发布提交与后台匹配两个阶段 \\
+  M-05 & 版本与审计增强 & 核心类图使用现有物理字段，OperationLog.detail 承载操作详情 & custodianId、itemVersion、algorithmVersion 等作为增强字段演进 \\
+  M-06 & 匹配结果基数 & \term{uk\_match\_lost\_found} 保证 pair 唯一，重算执行 upsert & 类图表达唯一当前 pair，并允许多条认领历史关联 \\
+  M-07 & 举报对象范围 & 本期举报流程覆盖 LOST\_ITEM、FOUND\_ITEM、CLAIM\_REQUEST & 用例图展示物品举报，用户治理入口保留在 ADMIN 分区 \\
+  M-08 & 匹配通知深链 & 通知采用 relatedType=MATCH，前端据此进入匹配详情 & 一致性章节将 MATCH 作为通知关联类型 \\
+  M-09 & STAFF 批量登记 & 后端批量接口和发布者所有权共同支撑后勤登记流程 & 用例图展示 STAFF 批量能力，代管者字段可按业务扩展 \\
+  M-10 & 图片安全与匹配维度 & 无权访问时隐藏原图；\term{imageAvailable=false} 时按可用维度归一 & 序列图展示规则计算、安全保护和模型增强接口 \\
+  M-11 & 内容审核流程 & 新建记录进入既定发布状态，编辑后进入 PENDING 复审 & 用例图和状态规则统一采用发布审核与编辑复审口径 \\
+  \bottomrule
+\end{longtable}
+\normalsize
+
+表 \ref{tab:drift} 将需求主题、实现口径和四类视图统一到同一模型基线。扩展设计继续沿用这一基线，同步更新需求、枚举、迁移、schema、前端类型和测试，使角色、实体、事务与状态规则保持一致。
+
+\section{模型规则与实现映射}
+
+\begin{table}[H]
+  \centering
+  \caption{模型不变量、实现机制与测试位置}
+  \begin{tabularx}{\textwidth}{L{4.2cm} Y L{4.0cm}}
+    \toprule
+    不变量 & 实现机制 & 对应测试位置 \\
+    \midrule
+    同一 lost/found 只有一个匹配 pair & 唯一约束、create-or-get、upsert & \path{tests/unit/match/test_trigger.py}、\path{job/test_durable_jobs.py} \\
+    同一 found 同时最多一个活动认领 & 锁定 found、条件状态更新、活动状态查询 & \path{tests/unit/claim/test_service.py} \\
+    单 claim 最多一个交接 & handover.claimId 唯一、重复创建返回已有记录 & claim service 测试与迁移测试 \\
+    证件不能自动通过 & verify level 纯函数、凭证存在检查、人工审核状态 & claim 的 CERT/LEVEL\_3 测试 \\
+    关闭或治理联动终止 & ClaimService terminate、match expire、通知与日志 & \path{tests/unit/admin/test_governance.py} \\
+    敏感检测失败保持保护 & 含图先敏感、仅全部明确安全才解除 & item AI、durable job、sensitive asset 测试 \\
+    匹配与通知不会重复 & pair 唯一、只对新建/重新激活结果通知 & match high-priority 与 durable job 测试 \\
+    双确认结案副作用同事务 & 锁 handover/claim/found，最后统一 commit & claim handover flow 测试 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+表中的单元测试和静态检查覆盖模型在代码级的主要路径，并将每项不变量对应到 service、repository、约束或事务机制。面向部署环境的扩展验证可在 MySQL/MinIO 中执行并发认领、并发审批、并发双确认、AI 超时切换、任务回收、对象访问控制和通知深链，并以四张图定义的数据库终态作为统一判定口径。
+
+\section{结论}
+
+本课程成果已完成「寻迹」的四类核心模型：用例图限定角色和系统边界；领域类图确定用户、物品、匹配、认领、交接、通知、积分、治理和任务之间的逻辑关系；序列图把发布与 AI 协作解耦为可恢复的持久化任务；状态图用严格验证、人工审核、申诉、双确认和终止语义保护认领闭环。
+
+当前代码已经实现登录、发布、搜索、匹配、认领、交接和治理等 P0 路径，并通过 service、唯一约束、条件更新和事务副作用维持四类模型的一致性，形成完整的核心业务闭环。后续扩展可围绕部署环境并发验证、物理关系与版本字段增强、枚举和接口文档同步、图像维度增强、脱敏副本策略以及 STAFF 代管模型持续演进。四类模型共同作为 API、实现和测试的评审基线。

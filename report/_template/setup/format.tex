@@ -1,0 +1,46 @@
+\definecolor{sysugreen}{HTML}{006E54}
+\definecolor{sysugreenlight}{HTML}{E7F2EF}
+\definecolor{reportblue}{HTML}{1F5F99}
+\definecolor{reportorange}{HTML}{B65E16}
+\definecolor{reportred}{HTML}{A33A3A}
+\definecolor{reportgray}{HTML}{5B6573}
+\definecolor{linegray}{HTML}{C8CDD3}
+
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.25em}
+\setlength{\emergencystretch}{2em}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{5pt}
+\setcounter{tocdepth}{1}
+\setcounter{secnumdepth}{3}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\newcommand{\implemented}{\textcolor{sysugreen}{\textbf{已完成}}}
+\newcommand{\verified}{\textcolor{reportblue}{\textbf{验证通过}}}
+\newcommand{\planned}{\textcolor{reportorange}{\textbf{持续优化}}}
+\newcommand{\term}[1]{\texttt{#1}}
+
+\tikzset{
+  every node/.style={font=\small,align=center},
+  actor/.style={draw=sysugreen,thick,rounded corners=2pt,fill=sysugreenlight,minimum width=2.2cm,minimum height=0.85cm},
+  usecase/.style={draw=reportblue,thick,ellipse,fill=blue!4,minimum width=2.65cm,minimum height=0.82cm},
+  component/.style={draw=sysugreen,thick,rounded corners=3pt,fill=sysugreenlight,minimum width=3.0cm,minimum height=1.0cm},
+  datastore/.style={draw=reportorange,thick,cylinder,shape border rotate=90,aspect=0.25,fill=orange!6,minimum width=2.5cm,minimum height=1.0cm},
+  state/.style={draw=reportblue,thick,rounded corners=3pt,fill=blue!5,minimum width=2.5cm,minimum height=0.8cm},
+  decision/.style={draw=reportorange,thick,diamond,aspect=2,fill=orange!6},
+  flow/.style={-{Latex[length=2.5mm]},thick,draw=reportgray},
+  dashedflow/.style={-{Latex[length=2.5mm]},thick,dashed,draw=reportgray},
+  note/.style={draw=linegray,fill=gray!4,rounded corners=2pt,font=\zihao{-5},align=left}
+}
+
+\makeatletter
+\def\ps@xunjireport{%
+  \def\@oddhead{\zihao{-5}\color{reportgray}\ProjectName\hfill\ReportTitle}%
+  \def\@evenhead{\@oddhead}%
+  \def\@oddfoot{\hfil\thepage\hfil}%
+  \def\@evenfoot{\@oddfoot}%
+}
+\makeatother

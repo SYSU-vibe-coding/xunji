@@ -7,6 +7,7 @@
 1. 先阅读 `test-plan.md`
 2. 按 `test-cases.md` 执行核心功能测试
 3. 在阶段验收前对照 `acceptance-checklist.md` 回归
+4. 查看 `remaining-p1-p2-audit-2026-07-11.md` 了解当前未关闭的质量与上线风险
 
 测试原则：
 

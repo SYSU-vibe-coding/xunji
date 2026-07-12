@@ -1,478 +1,365 @@
-\section{文档目的与成果概览}
+\section{文档目的与范围}
 
-本文说明「寻迹」校园失物招领平台如何把需求、设计、编码、测试、配置、持续集成和质量管理
-组织为可重复的软件工程过程。本文是截至 2026 年 7 月 12 日的课程期末成果版，
-集中呈现需求与架构文档、源代码、依赖锁、Alembic 迁移、GitHub Actions、
-测试结果与 Git 协作记录共同构成的工程化交付。
+本文说明「寻迹」校园失物招领平台在开发过程中采用的自动化与协作化手段，以及这些手段
+如何作用于需求变更、编码、测试、集成和交付。软件工程化的目的不是增加额外流程，而是
+把团队共同遵守的规则固化到仓库、工具和流水线中，使不同成员能够按一致方式开发，并让
+重复检查由工具执行。
 
 \begin{table}[H]
   \centering
-  \caption{工程化成果概览}
-  \begin{tabularx}{\textwidth}{L{3.0cm}Y Y}
+  \caption{软件工程化手段总览}
+  \begin{tabularx}{\textwidth}{L{2.8cm}L{4.1cm}Y}
     \toprule
-    成果类别 & 已完成内容 & 主要交付 \\
+    方向 & 采用的手段 & 在项目中的作用 \\
     \midrule
-    设计基线 & 需求、架构、API、枚举、数据库与测试口径统一管理 & \path{docs/} 系列文档 \\
-    工程实现 & 模块化代码、锁文件、迁移、容器配置和持久任务已组织入库 & Backend、AI、双前端与六服务 Compose \\
-    质量校验 & Ruff、Mypy、Pytest、vue-tsc、Vitest 与生产构建纳入 CI & 五个并行 Job 全部通过 \\
-    协作交付 & 分支、提交、评审、行尾和忽略规则形成团队约定 & \path{CONTRIBUTING.md}、\path{.gitattributes}、期末报告 \\
+    过程组织 & 轻量迭代、需求优先级、任务关闭准则 & 将大型目标拆成可评审、可联调的增量 \\
+    团队协作 & Git 分支、Conventional Commit、Pull Request & 隔离并行修改，保留清晰的变更语义 \\
+    设计协同 & 需求、API、枚举、数据库文档同步更新 & 保持前端、后端、AI 服务对同一契约的理解一致 \\
+    自动检查 & Ruff、Mypy、vue-tsc、Pytest、Vitest & 自动发现格式、类型和业务逻辑问题 \\
+    持续集成 & GitHub Actions 五类并行任务 & 在 push 和 Pull Request 时统一执行质量检查 \\
+    可重复构建 & uv/pnpm 锁文件、Docker、Compose & 固定依赖解析方式并统一运行环境 \\
+    数据演进 & SQLAlchemy 模型与 Alembic 迁移 & 让数据库结构随代码按版本演进 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\section{开发过程与交付策略}
+\section{迭代过程与任务协同}
 
-\subsection{轻量迭代模型}
+\subsection{轻量迭代方式}
 
-项目采用「先闭环、再增强、后打磨」的轻量迭代，而不是重型阶段模型。需求先按 P0、P1、
-P2 分级：P0 保证登录、发布、搜索、匹配、认领、交接、通知和后台审核闭环；P1 增加
-综合评分、敏感保护、信用、举报、统计与批量录入；P2 收纳凭证审核、申诉、邮件通知、
-长期未领公告和更强模型。新需求若影响数据库、接口、页面或里程碑，则进入后续
-增量迭代，使期末交付始终聚焦已定义的课程主流程。
+项目采用短周期增量开发。需求按 P0、P1、P2 排序：P0 对应登录、发布、搜索、匹配、
+认领、交接和审核等主流程；P1 处理信用、举报、统计和内容治理；P2 用于不影响主流程的
+体验增强。每轮迭代从可演示的用户场景出发，同时确定接口、数据、页面和测试任务，避免
+不同模块各自推进后再集中拼接。
 
-\begin{longtable}{L{2.0cm} L{3.1cm} L{4.9cm} L{4.4cm}}
-  \caption{迭代与可交付增量}\label{tab:iterations}\\
+\begin{longtable}{L{2.0cm}L{3.2cm}L{5.0cm}L{4.1cm}}
+  \caption{迭代阶段与协作活动}\label{tab:engineering-iterations}\\
   \toprule
-  阶段 & 目标 & 主要产物 & 工程验收点 \\
+  阶段 & 主要目标 & 团队活动 & 自动化配合 \\
   \midrule
   \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable（续）}\\
   \toprule
-  阶段 & 目标 & 主要产物 & 工程验收点 \\
+  阶段 & 主要目标 & 团队活动 & 自动化配合 \\
   \midrule
   \endhead
-  A & 需求冻结与选型 & 需求基线、分工、仓库结构、接口草案 & P0/P1/P2 范围明确，角色和文档入口建立 \\
-  B & 概要与数据设计 & 模块、数据库、枚举、接口规范、页面清单 & 字段、状态和错误码形成书面契约 \\
-  C & P0 功能骨架 & 双前端、主后端、AI 基线、迁移和基础联调 & 主路径可运行，关键 service 有自动化测试 \\
-  D & P1 增强 & 匹配、积分、举报、统计、敏感策略 & 状态副作用、审计和降级路径补齐 \\
-  E & 集成与答辩 & 回归、部署、演示数据、报告和脚本 & 质量命令通过，报告、PDF 与验收记录归档 \\
   \bottomrule
+  \endlastfoot
+  需求整理 & 明确角色、场景和优先级 & 统一术语、状态和验收条件 & 文档格式与链接检查 \\
+  设计协同 & 确定模块、接口和数据关系 & 评审 API、枚举、状态机和迁移方案 & 类型检查与迁移逻辑测试 \\
+  功能开发 & 实现可联调的纵向功能 & 分支开发、小步提交、交叉 review & 单元测试、静态检查 \\
+  集成联调 & 串联双前端、主后端和 AI 服务 & 按用户场景联调并登记问题 & 前端构建、Compose 配置检查 \\
+  交付整理 & 固化版本、说明和演示环境 & 更新文档、脚本与部署配置 & CI 全量检查、PDF 自动构建 \\
 \end{longtable}
 
-\subsection{完成定义与例会机制}
+\subsection{任务关闭准则}
 
-仓库定义的完成条件包括：代码进入对应功能分支、至少一次同伴 review、接口或字段变化
-同步文档、关键路径完成自测并通过课程主流程验收。周初确定目标、任务和分支；周中同步
-联调阻塞及接口/数据库变化；周末验收增量并更新文档与测试状态。联调问题应包含请求、
-响应和复现步骤，避免只保留在即时聊天中。
+一个开发任务进入合并流程前，需要同时满足以下准则：实现与需求编号或问题描述一致；
+接口、枚举、数据库字段和工作流变化同步修改文档；代码通过对应模块的格式、类型和测试
+命令；数据库变化附带 Alembic 迁移；界面变化说明交互影响；Pull Request 聚焦一个主题并
+由其他成员复核。该准则把「写完代码」转换为团队可共同判断的结束条件。
 
-团队工作约定由 \path{CONTRIBUTING.md}、CI 和提交历史共同承载；提交前的
-静态检查、测试和构建已组成统一的课程交付流程。GitHub required checks、
-分支保护和评审策略可作为团队后续扩展的平台治理能力。
-
-\section{需求、设计与接口契约}
-
-\subsection{文档即契约}
-
-项目将容易漂移的信息拆成权威文档，并在 \path{CODEBUDDY.md} 中按任务给出阅读路由。
-枚举值以 \path{docs/architecture/enums.md} 为唯一字典；JSON/数据库命名、时间、响应包、
-分页、ULID 和错误码以 \path{docs/api/conventions.md} 为准；匹配与信用规则分别由
-\path{matching-rules.md} 和 \path{credit-rules.md} 管理；数据库字段由设计文档与 Alembic
-共同演进。接口、数据库、枚举或工作流变化要求文档和代码同一 PR 更新。
-
-\begin{longtable}{L{3.4cm} L{5.3cm} L{5.8cm}}
-  \caption{契约来源与实现映射}\label{tab:contracts}\\
-  \toprule
-  契约主题 & 权威来源 & 实现/验证位置 \\
-  \midrule
-  \endfirsthead
-  \toprule
-  契约主题 & 权威来源 & 实现/验证位置 \\
-  \midrule
-  \endhead
-  需求范围与优先级 & \path{docs/project-management/requirements-baseline.md} & 页面、router/service 和验收清单 \\
-  角色、枚举与状态 & \path{docs/architecture/enums.md}、\path{interaction-logic-model.md} & Pydantic Literal、service 守卫、前端共享类型 \\
-  API 命名与响应 & \path{docs/api/conventions.md}、模块 API 文档 & \path{backend/app/common/response.py}、schemas、前端 HTTP 封装 \\
-  数据结构与迁移 & \path{docs/architecture/database-design.md} & SQLAlchemy models、\path{backend/alembic/versions/} \\
-  匹配和降级 & \path{matching-rules.md}、\path{docs/api/ai-service.md} & backend AIClient、match service、AI baseline tests \\
-  信用与防重 & \path{credit-rules.md} & CreditService、唯一约束、service tests \\
-  测试口径 & \path{docs/testing/test-plan.md}、\path{test-cases.md} & pytest/Vitest 文件、CI 与 acceptance checklist \\
-  \bottomrule
-\end{longtable}
-
-\subsection{需求追踪链}
-
-\path{interaction-logic-model.md} 已给出 P0 需求到页面、API/service、状态和测试的追踪矩阵。
-工程化报告建议用如下最小链路维护每个变更：
-
-\begin{center}
-  \term{需求编号} $\rightarrow$ \term{页面/用例} $\rightarrow$ \term{API Schema}
-  $\rightarrow$ \term{Service 状态迁移} $\rightarrow$ \term{迁移/数据约束}
-  $\rightarrow$ \term{自动化测试} $\rightarrow$ \term{验收记录}
-\end{center}
-
-例如 P0-08 交接确认对应用户端认领详情、确认 API、ClaimService、claim、found、lost、
-handover 状态变化、积分唯一键、通知与日志，以及双确认 service 测试。链路的价值在于
-修改任何一端时都能判断受影响的文档、表和测试，而不是只验证单个接口返回成功。
+团队按周协调任务。周初确定本轮用户场景和接口依赖，周中同步跨模块变化及联调问题，
+周末按场景走查增量。问题记录包含触发条件、预期行为和实际表现，使负责成员可以直接
+定位，而不依赖口头转述。
 
 \section{仓库组织与责任边界}
 
-仓库采用 monorepo，使跨端类型、接口文档、迁移和部署配置能在同一提交内评审：
+项目采用 monorepo 管理用户端、管理端、主后端、AI 服务、部署文件和文档。相关变更可以
+在同一个 Pull Request 中评审，例如新增一个状态时，可同时查看后端 Schema、前端共享
+类型、数据库迁移和接口说明，减少跨仓库版本不同步。
 
 \begin{table}[H]
   \centering
-  \caption{顶层目录与工程责任}
-  \begin{tabularx}{\textwidth}{L{3.0cm}Y Y}
+  \caption{模块责任与协作边界}
+  \begin{tabularx}{\textwidth}{L{3.0cm}L{4.4cm}Y}
     \toprule
-    目录 & 内容 & 责任边界 \\
+    模块 & 主要责任 & 协作约束 \\
     \midrule
-    \path{frontend/user-app/} & 用户端 Vue SPA & 移动优先交互、表单、路由、状态和 API 调用 \\
-    \path{frontend/admin-web/} & 管理端 Vue SPA & 审核、治理、统计和管理员会话 \\
-    \path{frontend/shared/} & TypeScript 枚举、类型、标签与选项 & 双前端共享的接口字面量和响应类型 \\
-    \path{backend/} & FastAPI 模块化单体、Alembic 和 pytest & 业务真相、状态、权限、事务和持久化 \\
-    \path{ai-service/} & 独立 FastAPI 计算服务与测试 & 分类、匹配、敏感检测及规则降级，不连接业务库 \\
-    \path{deploy/} & Compose、环境模板与说明 & 可重复部署和本地联调 \\
-    \path{docs/} & 需求、架构、API、项目管理和测试 & 设计基线、决策与验收材料 \\
-    \path{report/} & 七项期末书面交付物与公共模板 & 从仓库事实生成可归档报告 \\
+    用户端 & 用户登录、物品发布、搜索、认领与交接交互 & 通过统一 API 层访问后端，共用接口类型与枚举 \\
+    管理端 & 内容审核、举报治理、用户管理和统计 & 管理员权限由后端判定，页面不复制业务规则 \\
+    主后端 & HTTP 接口、业务状态、事务与数据持久化 & 遵循 router、service、repository 分层 \\
+    AI 服务 & 分类、匹配和敏感内容辅助判断 & 通过受鉴权 HTTP 接口调用，不直接访问业务数据库 \\
+    部署模块 & 环境模板、镜像构建和六服务编排 & 配置从环境注入，不把本地秘密写入镜像 \\
+    文档模块 & 需求、设计、API、测试和报告 & 契约变化与实现置于同一变更中评审 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-WBS 将项目管理/QA/文档、用户前端、用户与物品后端、认领与治理后端、AI/运维分配给
-五类角色，并规定交叉 review 责任。个人贡献由 issue、PR、Git 提交、文档和
-团队确认综合记录，使代码、协作和书面交付都能在期末进行追溯。
+主后端的分层规则是工程约束的重要部分。Router 负责 HTTP 参数、Schema 和身份依赖；
+Service 负责业务规则、状态迁移和事务边界；Repository 负责 SQL 查询与持久化。ORM 模型
+和 Pydantic Schema 分开维护，使数据库结构、传输格式和业务逻辑各自具有明确职责。
 
-\section{Git、分支与评审协作}
+\section{文档与接口契约协作}
 
-\subsection{分支和提交约定}
+\subsection{统一约定}
 
-\path{CONTRIBUTING.md} 定义 \term{main} 为可发布分支、\term{develop} 为集成分支，功能和
-修复分别使用 \term{feature/<name>}、\term{fix/<name>}。提交采用短 Conventional Commit，
-相关时携带 FR 编号，例如：
+团队把跨模块信息视为共同契约。JSON 字段使用 camelCase，数据库列使用 snake\_case，
+标识符使用 ULID；响应包、分页、时间格式和错误码采用统一约定。角色、物品状态、认领
+状态和审核状态使用权威枚举，前端展示值不能自行创造新的字面量。
+
+\begin{table}[H]
+  \centering
+  \caption{契约变更的同步范围}
+  \begin{tabularx}{\textwidth}{L{3.0cm}Y Y}
+    \toprule
+    变更类型 & 需要同步的对象 & 复核重点 \\
+    \midrule
+    API 请求或响应 & API 说明、Pydantic Schema、前端 TypeScript 类型 & 字段命名、必填性和错误语义 \\
+    枚举或状态机 & 枚举说明、Service 守卫、页面标签与操作入口 & 合法迁移和角色权限 \\
+    数据库结构 & ORM、Alembic 迁移、数据库设计说明 & 默认值、索引、唯一约束与历史数据处理 \\
+    业务规则 & 需求条目、Service、测试用例和交互说明 & 正常分支、拒绝条件和副作用 \\
+    页面流程 & 页面清单、路由、API 调用和验收场景 & 前后端状态是否一致 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{变更影响链}
+
+对跨端需求，团队按「需求场景 $\rightarrow$ 页面操作 $\rightarrow$ API Schema
+$\rightarrow$ Service 状态迁移 $\rightarrow$ 数据约束 $\rightarrow$ 自动化测试」的顺序
+分析影响。例如调整交接确认规则时，需要同时检查认领详情页、确认接口、认领状态机、
+积分副作用和通知逻辑，而不是只修改一个按钮或一个接口。
+
+\section{Git 协作规范}
+
+\subsection{分支与提交}
+
+\term{main} 用于稳定交付，\term{develop} 用于团队集成，功能开发和问题修复分别使用
+\term{feature/<name>} 与 \term{fix/<name>}。成员在独立分支中小步提交，减少多人直接修改
+同一区域造成的冲突。提交信息采用 Conventional Commit，使历史能够按功能、修复、测试、
+文档和工程配置快速筛选。
 
 \begin{verbatim}
 feat(FR-02): add lost item publish api
-fix(FR-05): correct claim review status transition
-refactor(claim): extract handover transaction into service
-test(match): cover score fallback path
+fix(FR-05): correct claim review transition
+test(match): cover fallback calculation
 docs: update database model
+chore(ci): adjust automated checks
 \end{verbatim}
 
-每个 PR 应只处理一个功能或缺陷，关联 issue/FR，说明验证记录；UI 变化附截图，API、枚举、
-数据库字段或流程变化同步对应文档。CI 对 main/develop 的 push 与 pull request 都运行，
-并使用 concurrency group 取消同一引用上的旧运行，减少过时结果占用资源。
+\subsection{Pull Request 协作}
 
-\subsection{跨平台文本与忽略规则}
+Pull Request 关联需求或问题，说明变更范围、受影响模块和本地检查方式。API、枚举、数据库
+或工作流变化必须同时包含对应说明；界面变化附关键页面截图。评审者重点检查业务边界、
+权限、事务、错误处理和契约一致性。提出修改后，作者以新增提交回应，保留讨论上下文。
 
-2026 年 7 月 12 日仓库新增 \path{.gitattributes}：所有文本自动识别并统一 LF，Windows
-\path{*.bat} 和 \path{*.cmd} 保持 CRLF，图片、PDF、压缩包和字体标记为 binary，避免
-行尾归一化破坏二进制文件。\path{.gitignore} 排除 \path{.env}、虚拟环境、\path{node_modules}、
-缓存、覆盖率与 LaTeX 中间产物，同时允许 \path{.env.example} 入库。该组合降低跨平台
-整文件 diff 和秘密误提交概率。Secret 扫描与凭据轮换属于生产化安全的持续扩展方向。
+仓库通过 \path{.gitattributes} 统一文本行为：一般文本使用 LF，Windows 命令脚本保持
+CRLF，图片、PDF、字体和压缩包标记为二进制。\path{.gitignore} 排除环境秘密、依赖目录、
+缓存、覆盖率和构建中间产物，使评审内容集中在源代码与必要交付物上。
 
-\section{代码规范与静态约束}
+\section{编码规范与自动检查}
 
-\subsection{后端与 AI 服务}
+\subsection{Python 模块}
 
-\begin{longtable}{L{3.2cm} L{6.1cm} L{5.5cm}}
-  \caption{Python 工程规范}\label{tab:python-rules}\\
+\begin{longtable}{L{3.0cm}L{5.6cm}L{5.6cm}}
+  \caption{Python 工程规则与工具}\label{tab:python-engineering}\\
   \toprule
-  主题 & 约定 & 工具/实现 \\
+  主题 & 项目约定 & 自动化手段 \\
   \midrule
   \endfirsthead
+  \multicolumn{3}{c}{\tablename\ \thetable（续）}\\
   \toprule
-  主题 & 约定 & 工具/实现 \\
+  主题 & 项目约定 & 自动化手段 \\
   \midrule
   \endhead
-  语言与类型 & Python 3.12，公共函数/方法/返回值要求类型注解 & Mypy strict + Pydantic plugin \\
-  格式与 lint & 100 列，\path{E/F/W/I/B/UP/SIM/N/ASYNC/RUF} 规则 & Ruff check 与 format check \\
-  异步边界 & 路由 \term{async def}，DB 用 AsyncSession，HTTP 用 httpx.AsyncClient & Ruff ASYNC、代码评审和测试 \\
-  分层 & router 只处理 HTTP/Schema/权限，service 处理业务，repository 处理 SQL & 固定包结构、静态检查与代码评审 \\
-  数据模型 & SQLAlchemy ORM 与 Pydantic DTO 分离 & \path{models.py} 与 \path{schemas.py} \\
-  ID 与命名 & ULID 26 位；JSON camelCase、数据库 snake\_case & ULID 工具、Pydantic alias、API 文档 \\
-  事务与审计 & 多表写入同一会话提交，关键状态写 operation log & 行锁、CAS、唯一键、service tests \\
   \bottomrule
+  \endlastfoot
+  格式与风格 & Python 3.12、100 列、统一 import 与命名 & Ruff lint 与 format check \\
+  类型 & 公共函数和返回值使用类型注解，Schema 明确字段约束 & Mypy strict、Pydantic plugin \\
+  异步 I/O & 数据库和 HTTP 调用使用显式异步接口 & Ruff ASYNC、Mypy、异步测试 \\
+  分层依赖 & Router 不直接访问 Repository，模型与 DTO 分离 & 包结构、代码评审与模块测试 \\
+  数据一致性 & 多表写入由 Service 管理事务，关键并发使用锁与唯一约束 & Service 测试、数据库迁移 \\
 \end{longtable}
 
-\path{backend/pyproject.toml} 和 \path{ai-service/pyproject.toml} 集中配置 Ruff、Mypy、Pytest
-及 marker。测试允许 assert；FastAPI Depends 模式豁免 B008；异步测试由
-\term{asyncio\_mode=auto} 驱动。后端覆盖率以 \path{app/} 为源，排除应用入口和迁移。
+\subsection{前端模块}
 
-\subsection{前端规范}
+双前端使用 Vue 3 Composition API、TypeScript strict、Pinia 和 Vue Router。共享模块保存
+接口类型、枚举、标签与格式化函数，两个应用引用同一份源码。统一 Axios 封装负责 API
+基址、Bearer token、响应解包、业务错误和未授权会话清理；页面组件只处理展示与交互，
+权限和最终业务判断仍由后端负责。
 
-双前端使用 Vue 3 Composition API、Pinia、Vue Router、Element Plus、TypeScript strict 和
-SCSS。\path{frontend/shared/src/} 汇总接口类型和枚举，Vite/tsconfig 以
-\term{@xunji/shared} 指向同一源码，减少双端重复定义。API 层统一 Axios 实例、15 秒超时、
-Bearer token、统一响应解包、业务错误对象、requestId 和未授权会话清理；router 负责页面
-访问体验，后端仍是权限真相。
+\term{vue-tsc --noEmit} 检查模板和 TypeScript 类型，Vitest 执行工具函数、API 封装和
+关键交互逻辑测试，Vite production build 检查生产构建。三类检查同时进入前端 CI 任务，
+使开发机与远端流水线采用相同命令。
 
-\term{pnpm lint} 通过 \term{vue-tsc --noEmit} 执行 TypeScript 类型校验，Vitest 覆盖
-共享工具、API 封装和关键交互逻辑。ESLint/Prettier、Vue 组件测试和浏览器
-端到端回归可在持续优化阶段扩展，与现有类型、单元和构建校验形成更完整的前端质量链。
+\section{依赖与构建自动化}
 
-\section{依赖、环境与可重复构建}
-
-\subsection{依赖锁定}
-
-Python 模块使用 \term{uv} 管理 \path{pyproject.toml + uv.lock}，前端分别提交
-\path{package.json + pnpm-lock.yaml}。CI 使用 \term{uv sync --all-extras --dev} 和
-\term{pnpm install --frozen-lockfile}；Docker 使用 \term{uv sync --frozen --no-dev} 与
-固定 pnpm 9.15.9。这样开发声明可以使用兼容范围，CI/镜像仍按锁文件解析到确定版本。
+Python 模块使用 uv 管理 \term{pyproject.toml} 和 \term{uv.lock}，两个前端使用 pnpm 管理
+\term{package.json} 和各自的 \term{pnpm-lock.yaml}。声明文件表达依赖范围，锁文件固定
+实际解析版本；CI 采用冻结安装，避免自动更新依赖导致不同成员或不同日期的构建结果漂移。
 
 \begin{table}[H]
   \centering
-  \caption{模块依赖与构建契约}
-  \begin{tabularx}{\textwidth}{L{3.0cm}L{4.2cm}Y Y}
+  \caption{模块构建约定}
+  \begin{tabularx}{\textwidth}{L{3.0cm}L{3.3cm}L{3.9cm}Y}
     \toprule
-    模块 & 运行时 & 锁文件 & 主要构建命令 \\
+    模块 & 运行环境 & 依赖工具 & 构建或启动方式 \\
     \midrule
-    Backend & Python $\geq 3.12$ & \path{backend/uv.lock} & \term{uv sync}；\term{uv run uvicorn app.main:app} \\
-    AI Service & Python $\geq 3.12$ & \path{ai-service/uv.lock} & \term{uv sync}；\term{uv run uvicorn app.main:app} \\
-    User App & Node 20、pnpm 9 & \path{frontend/user-app/pnpm-lock.yaml} & \term{pnpm build} \\
-    Admin Web & Node 20、pnpm 9 & \path{frontend/admin-web/pnpm-lock.yaml} & \term{pnpm build} \\
-    容器栈 & Docker/Podman Compose & 上述锁文件 + 镜像 tag & \term{docker compose ... up --build} \\
+    主后端 & Python 3.12 & uv + uv.lock & uvicorn 启动，Docker 构建镜像 \\
+    AI 服务 & Python 3.12 & uv + uv.lock & 独立 uvicorn 进程，Docker 构建镜像 \\
+    用户端 & Node 20、pnpm 9 & pnpm lockfile & Vite 构建，Nginx 提供静态文件 \\
+    管理端 & Node 20、pnpm 9 & pnpm lockfile & Vite 构建，Nginx 提供静态文件 \\
+    完整环境 & Docker/Podman Compose & 镜像 tag 与环境模板 & 编排六个服务并创建持久卷 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-基础镜像和 MySQL/MinIO 使用明确 tag，结合四份依赖锁支持课程环境的可重复构建。
-镜像 digest、非 root 运行、SBOM 和镜像漏洞扫描纳入生产供应链的扩展方向。
+\section{测试自动化}
 
-\subsection{配置管理}
-
-真实配置由环境变量和不入库的 \path{.env} 提供，仓库只保留带空秘密的示例。Compose
-对 MySQL root、数据库、JWT、管理员、MinIO 等关键值使用必填展开；后端在非 DEBUG
-环境拒绝默认 JWT/管理员密码，AI 服务要求共享环境的服务 token 至少 32 字符（显式本地
-模式除外）。本地 debug SMS 还需要 DEBUG、SMS\_DEBUG\_ENABLED 和精确手机号白名单
-同时满足，不能使用通配符。
-
-\section{数据库迁移与结构演进}
-
-数据库演进以 Alembic 为唯一真相源。\path{backend/alembic/env.py} 导入全部 ORM metadata，
-支持异步在线迁移和离线 SQL；开发使用 autogenerate 生成初稿，再由评审者核对数据迁移、
-索引、唯一约束、默认值和降级路径。常用命令为：
-
-\begin{verbatim}
-cd backend
-uv run alembic upgrade head
-uv run alembic revision --autogenerate -m "add xxx"
-uv run alembic downgrade -1
-uv run alembic heads
-\end{verbatim}
-
-当前迁移从 0001/0002 基础表，经过内容审核字段、match pair 去重、治理审核意见、评分来源、
-举报唯一目标，到 0008 持久任务，形成单一线性 head。0004 在约束前重写外部引用，体现
-「先迁移数据、再收紧约束」；0007 完成重复举报整理与唯一约束，部署时按规范
-在数据库备份上核对历史记录。
-
-历史 \path{backend/sql/schema.sql} 仅保留参考，不再作为部署入口。由旧脚本创建且没有
-\term{alembic\_version} 的数据库不能直接 stamp：必须先备份并逐项比较表、列、索引、唯一
-约束、默认值和 nullability，结构完全等价后才可一次性 stamp。CI 对迁移脚本的
-结构逻辑与单一 head 进行校验；MySQL 容器中的 upgrade/downgrade 属于持续集成扩展项。
-
-\section{测试分层与自动化质量}
-
-\subsection{现有测试结构}
-
-\begin{longtable}{L{2.4cm} L{3.9cm} L{4.2cm} L{3.6cm}}
-  \caption{测试层次与课程成果}\label{tab:test-layers}\\
-  \toprule
-  层次 & 工具/位置 & 已覆盖重点 & 课程用途 \\
-  \midrule
-  \endfirsthead
-  \toprule
-  层次 & 工具/位置 & 已覆盖重点 & 课程用途 \\
-  \midrule
-  \endhead
-  后端 service/接口 & pytest、pytest-asyncio、httpx ASGITransport & 用户、物品、匹配、认领、积分、通知、治理、安全、任务 & 隔离环境验证业务规则和状态迁移 \\
-  AI 单元/路由 & pytest、httpx mock transport & Schema、配置、服务 token、客户端异常、规则降级、URL 安全 & 验证离线规则基线和服务契约 \\
-  前端工具/API & Vitest & HTTP 错误、格式化、导航、交互冲突、会话辅助函数 & 验证双前端共享逻辑 \\
-  静态检查 & Ruff、Mypy、vue-tsc & Python 风格/异步/类型，TypeScript strict & 在提交前发现类型与规范问题 \\
-  构建检查 & Vite build、Docker build、Compose config & 生产前端产物、Backend/AI 镜像、Compose 展开 & 验证可重复构建与部署配置 \\
-  验收走查 & acceptance checklist & P0/P1 主流程与 service 路径 & 统一记录功能验收结果 \\
-  \bottomrule
-\end{longtable}
-
-后端测试 fixture 每个测试通过 SQLAlchemy metadata 在内存 SQLite 建表，并替换 FastAPI
-session 依赖；MinIO client 和签名器使用 mock，保持测试离线且可重复。该结构高效验证
-业务规则，MySQL 锁与真实 MinIO 权限校验可作为集成环境的持续扩展项。
-
-\subsection{最近一次记录结果}
-
-截至基线日期，最近一次远端 CI 运行的自动化结果如下：
+测试按模块职责分层。主后端使用 Pytest、pytest-asyncio 和 httpx 的 ASGI transport，
+覆盖 Service 规则、状态变化和接口响应；AI 服务使用 Pytest 与 HTTP mock，检查输入
+Schema、规则计算、服务鉴权和外部调用处理；双前端使用 Vitest 检查共享工具、API 层和
+关键交互。测试所需的数据库会话、对象存储客户端和外部 HTTP 调用由 fixture 或 mock
+隔离，使日常测试不依赖手工搭建共享环境。
 
 \begin{table}[H]
   \centering
-  \caption{最近一次远端 CI 自动化结果}
-  \begin{tabularx}{\textwidth}{L{3.2cm}L{5.4cm}Y}
+  \caption{自动化检查的职责分工}
+  \begin{tabularx}{\textwidth}{L{3.1cm}L{4.0cm}Y}
     \toprule
-    模块 & 检查 & 记录结果 \\
+    检查层次 & 工具 & 主要发现的问题 \\
     \midrule
-    Backend & Ruff、Mypy、Pytest、Alembic heads & Ruff 通过；80 个源文件类型通过；200 passed；80\% 覆盖率 \\
-    AI Service & Ruff、Mypy、Pytest & Ruff 通过；14 个源文件类型通过；60 passed \\
-    User App & Vitest、production build & 17 passed；构建通过 \\
-    Admin Web & Vitest、production build & 15 passed；构建通过 \\
-    Compose/镜像 & 配置展开、Backend/AI 镜像构建 & 全部通过 \\
+    代码风格 & Ruff format、Ruff lint & 格式差异、错误导入、常见 Python 问题 \\
+    静态类型 & Mypy、vue-tsc & 参数与返回类型、模板绑定、共享接口不一致 \\
+    模块测试 & Pytest、Vitest & 业务规则、状态迁移、工具函数和错误处理 \\
+    构建检查 & Vite build、Docker build & 生产包编译和镜像构建问题 \\
+    部署检查 & Docker Compose config & 环境变量展开、服务定义和编排语法问题 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 \section{持续集成流水线}
 
-\subsection{触发与并发控制}
+\subsection{触发规则与执行结构}
 
-GitHub Actions 工作流 \path{.github/workflows/ci.yml} 在 main/develop 的 push 和 pull request
-触发。concurrency key 由 workflow 与 ref 组成，\term{cancel-in-progress=true}，同一分支的新
-提交会取消旧运行。五个 job 默认并行：Backend、AI Service、User App、Admin Web 和 Docker
-build smoke；任一 job 异常都会使本次工作流失败，共同构成课程交付的自动化质量门禁。
-
-\subsection{CI 图}
+GitHub Actions 在 \term{main}、\term{develop} 的 push 和 Pull Request 上触发。流水线按
+Backend、AI Service、User App、Admin Web 和 Docker Build 五类任务并行执行；同一分支
+有新提交时取消旧运行，避免过时任务继续占用资源。任何任务失败都会使本次检查失败，
+所有任务成功后才形成可合并的统一判断。
 
 \begin{figure}[H]
   \centering
   \resizebox{\textwidth}{!}{%
   \begin{tikzpicture}[node distance=1.15cm and 1.0cm]
-    \node[state] (event) {push / pull\_request\\main 或 develop};
-    \node[state, right=1.25cm of event] (checkout) {Checkout\\取消同 ref 旧运行};
+    \node[state] (event) {push / Pull Request\\main 或 develop};
+    \node[state, right=1.2cm of event] (checkout) {检出代码\\安装锁定依赖};
 
-    \node[component, right=1.35cm of checkout, yshift=2.8cm] (backend) {Backend\\Ruff / Mypy / Pytest + coverage};
-    \node[component, right=1.35cm of checkout, yshift=1.4cm] (ai) {AI Service\\Ruff / Mypy / Pytest};
-    \node[component, right=1.35cm of checkout] (user) {User App\\vue-tsc / Vitest / build};
-    \node[component, right=1.35cm of checkout, yshift=-1.4cm] (admin) {Admin Web\\vue-tsc / Vitest / build};
-    \node[component, right=1.35cm of checkout, yshift=-2.8cm] (docker) {Docker Smoke\\Compose config + image build};
+    \node[component, right=2.0cm of checkout, yshift=2.8cm] (backend) {Backend\\Ruff / Mypy / Pytest};
+    \node[component, right=2.0cm of checkout, yshift=1.4cm] (ai) {AI Service\\Ruff / Mypy / Pytest};
+    \node[component, right=2.0cm of checkout] (userjob) {User App\\类型 / 测试 / 构建};
+    \node[component, right=2.0cm of checkout, yshift=-1.4cm] (admin) {Admin Web\\类型 / 测试 / 构建};
+    \node[component, right=2.0cm of checkout, yshift=-2.8cm] (docker) {Docker\\Compose 配置 / 镜像};
 
-    \node[decision, right=2.0cm of user] (gate) {全部 job\\成功?};
-    \node[state, right=1.4cm of gate, yshift=0.85cm] (pass) {绿色 CI\\产生覆盖率产物};
-    \node[state, right=1.4cm of gate, yshift=-0.85cm] (fail) {失败 CI\\定位 job/日志};
+    \node[decision, right=2.4cm of userjob] (gate) {所有任务\\成功?};
+    \node[state, right=1.35cm of gate, yshift=0.85cm] (pass) {允许进入\\合并评审};
+    \node[state, right=1.35cm of gate, yshift=-0.85cm] (fail) {返回对应任务\\修改后重跑};
 
     \draw[flow] (event) -- (checkout);
-    \draw[flow] (checkout) -- (backend);
-    \draw[flow] (checkout) -- (ai);
-    \draw[flow] (checkout) -- (user);
-    \draw[flow] (checkout) -- (admin);
-    \draw[flow] (checkout) -- (docker);
-    \draw[flow] (backend) -- (gate);
-    \draw[flow] (ai) -- (gate);
-    \draw[flow] (user) -- (gate);
-    \draw[flow] (admin) -- (gate);
-    \draw[flow] (docker) -- (gate);
+
+    \coordinate (fork) at ($(checkout.east)+(0.85cm,0)$);
+    \draw[flow] (checkout.east) -- (fork);
+    \draw[draw=reportgray,thick] (fork |- backend.west) -- (fork |- docker.west);
+    \draw[flow] (fork |- backend.west) -- (backend.west);
+    \draw[flow] (fork |- ai.west) -- (ai.west);
+    \draw[flow] (fork |- userjob.west) -- (userjob.west);
+    \draw[flow] (fork |- admin.west) -- (admin.west);
+    \draw[flow] (fork |- docker.west) -- (docker.west);
+
+    \coordinate (gather) at ($(userjob.east)+(0.95cm,0)$);
+    \draw[flow] (backend.east) -- (gather |- backend.east);
+    \draw[flow] (ai.east) -- (gather |- ai.east);
+    \draw[flow] (userjob.east) -- (gather |- userjob.east);
+    \draw[flow] (admin.east) -- (gather |- admin.east);
+    \draw[flow] (docker.east) -- (gather |- docker.east);
+    \draw[draw=reportgray,thick] (gather |- backend.east) -- (gather |- docker.east);
+    \draw[flow] (gather) -- (gate.west);
+
     \draw[flow] (gate) -- node[above,sloped]{是} (pass);
     \draw[flow] (gate) -- node[below,sloped]{否} (fail);
   \end{tikzpicture}}
-  \caption{寻迹持续集成流水线}
+  \caption{持续集成流水线}
   \label{fig:ci-pipeline}
 \end{figure}
 
-\subsection{CI 实际命令}
+\subsection{各任务采用的自动化步骤}
 
-\begin{longtable}{L{2.7cm} L{7.1cm} L{4.8cm}}
-  \caption{CI job 与命令}\label{tab:ci-commands}\\
+\begin{longtable}{L{2.8cm}L{7.2cm}L{4.6cm}}
+  \caption{CI 任务与检查内容}\label{tab:ci-jobs-engineering}\\
   \toprule
-  Job & 关键命令 & 产物/目的 \\
+  任务 & 自动化步骤 & 输出用途 \\
   \midrule
   \endfirsthead
+  \multicolumn{3}{c}{\tablename\ \thetable（续）}\\
   \toprule
-  Job & 关键命令 & 产物/目的 \\
+  任务 & 自动化步骤 & 输出用途 \\
   \midrule
   \endhead
-  Backend & \term{uv python install 3.12}；\term{uv sync --all-extras --dev}；\term{ruff check .}；\term{ruff format --check .}；\term{mypy app}；\term{pytest --cov=app --cov-report=xml --cov-report=term-missing} & 上传 \path{backend/coverage.xml}，即使测试失败也尝试保留 \\
-  AI Service & \term{uv sync --all-extras --dev}；Ruff lint/format；\term{mypy app}；\term{pytest} & 验证服务离线基线、Schema 和客户端路径 \\
-  User App & pnpm 9 + Node 20；\term{pnpm install --frozen-lockfile}；\term{pnpm lint}；\term{pnpm test:unit --run}；\term{pnpm build} & TypeScript、Vitest 和生产包 \\
-  Admin Web & 与用户端相同的 frozen install、lint、test 和 build & 管理端类型、工具逻辑和生产包 \\
-  Docker Smoke & \term{docker compose ... config --quiet}；分别 \term{docker build} Backend/AI & 配置可展开，两个 Python 镜像可构建 \\
   \bottomrule
+  \endlastfoot
+  Backend & uv 冻结安装；Ruff lint/format；Mypy；Pytest coverage & 统一 Python 规范、类型、业务测试和覆盖率记录 \\
+  AI Service & uv 安装；Ruff lint/format；Mypy；Pytest & 检查独立服务的代码、类型和接口行为 \\
+  User App & pnpm 冻结安装；vue-tsc；Vitest；Vite build & 检查用户端类型、逻辑和生产包 \\
+  Admin Web & pnpm 冻结安装；vue-tsc；Vitest；Vite build & 检查管理端类型、逻辑和生产包 \\
+  Docker Build & Compose 配置展开；Backend 与 AI 镜像构建 & 检查部署配置和镜像构建链 \\
 \end{longtable}
 
-Compose 配置检查注入非部署用的 CI 占位秘密，以验证必填变量；Docker job 构建 Backend
-与 AI 镜像，双前端 job 同时完成生产包构建。六服务启动、健康等待与跨容器 API
-测试作为生产化集成环境的后续扩展。
+Backend 任务生成覆盖率 XML 作为流水线产物，便于查看未覆盖模块；Compose 检查使用专用
+占位配置验证必填环境变量和编排语法，不使用开发者本地的环境文件。流水线只负责提供
+一致判断，具体修改仍由对应模块成员在原分支完成。
 
-\section{质量闭环与成果巩固}
+\section{数据库与环境自动化}
 
-项目维护测试计划、验收清单和 P0/P1 修复记录。问题处理按「定位文件与行号、
-修改实现、增补回归、同步 API/架构文档、更新验收状态」的闭环执行。
+\subsection{数据库迁移}
 
-\begin{table}[H]
-  \centering
-  \caption{关键质量主题与实现措施}
-  \begin{tabularx}{\textwidth}{L{3.0cm}Y Y}
-    \toprule
-    质量主题 & 已完成措施 & 持续优化方向 \\
-    \midrule
-    持久任务 & \texttt{durable\_jobs}、租约、退避、回收与版本去重 & MySQL 多 worker 压力与故障演练 \\
-    敏感图片 & bucket 私有、稳定引用、短签名、权限后签名、fail-closed & MinIO 角色化端到端验收 \\
-    匹配可解释性 & imageAvailable/degraded/source 与主后端总分重算 & 真实图像模型选型和效果评估 \\
-    并发状态 & 行锁、CAS、唯一约束和统一冲突错误 & MySQL 并发认领、审批与双确认压测 \\
-    配置安全 & 非 DEBUG 拒绝默认值，短信调试码限定精确白名单 & 外部 secret manager、凭据轮换与集中限流 \\
-    交付一致性 & 需求、代码、测试和七份期末报告同步归档 & 从 OpenAPI/权威枚举生成共享契约 \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
+数据库结构通过 SQLAlchemy 模型和 Alembic 迁移共同管理。开发者修改模型后生成迁移
+初稿，再人工检查字段类型、默认值、索引、唯一约束和历史数据转换。部署时先执行
+\term{alembic upgrade head}，再启动主后端；迁移历史保持单一 head，使不同环境能够从
+明确版本按顺序升级。
 
-问题采用 P0、P1、P2、P3 优先级管理，课程主流程在期末版中完成回归，
-安全、并发、性能、任务观测与可访问性等生产化主题纳入持续优化 backlog。
+涉及数据结构的 Pull Request 同时包含 ORM、迁移和设计说明。自动生成只负责比较结构，
+评审者负责判断数据语义。例如建立唯一约束前，需要先处理历史重复记录；修改状态字段时，
+需要给出旧值到新值的转换规则。
 
-\section{工程度量与可追溯交付}
+\subsection{环境与容器}
 
-项目稳定记录各模块测试通过数、Python 覆盖率 XML、Mypy 检查源文件数、
-迁移 head、前端构建结果、CI job 状态和 Git 提交/作者。这些指标用于复核可重复构建、
-主流程回归和变更追溯性。
+运行配置由环境变量注入，仓库保留不含真实秘密的示例模板。本地完整栈由 Compose 编排
+MySQL、MinIO、AI Service、Backend、User Web 和 Admin Web；后端容器在启动应用前执行
+迁移，前端容器使用 Nginx 提供静态资源并代理 API。镜像构建和本地启动采用同一依赖
+锁文件，减少「开发机可以运行、交付环境不能运行」的差异。
 
-\begin{longtable}{L{3.2cm} L{5.4cm} L{5.9cm}}
-  \caption{可追溯交付记录}\label{tab:delivery-evidence}\\
+\section{典型变更的工程化流程}
+
+\begin{longtable}{L{3.0cm}L{8.2cm}L{3.4cm}}
+  \caption{典型变更处理流程}\label{tab:change-flow}\\
   \toprule
-  交付对象 & 归档内容 & 协作要求 \\
+  变更类型 & 处理步骤 & 自动检查 \\
   \midrule
   \endfirsthead
+  \multicolumn{3}{c}{\tablename\ \thetable（续）}\\
   \toprule
-  交付对象 & 归档内容 & 协作要求 \\
+  变更类型 & 处理步骤 & 自动检查 \\
   \midrule
   \endhead
-  功能 PR & issue/FR、变更摘要、测试命令、UI 截图或 API 样例 & 保持单一主题和清晰评审边界 \\
-  API 变更 & 对应 API 文档、Schema、共享 TS 类型和契约测试 & 枚举和错误码同步更新 \\
-  数据库变更 & Alembic upgrade/downgrade、数据库设计和备份/迁移说明 & 必须核对数据迁移，不只看 autogenerate \\
-  问题修复 & 复现步骤、回归测试、修复提交和验证结果 & 同步评估相关数据与配置 \\
-  发布/演示版本 & commit/tag、锁文件、迁移 head、环境模板和验收记录 & 冻结代码和演示数据 \\
-  报告 & 基线日期、实现状态、结果表与可追溯路径 & 图表与当前实现保持一致 \\
   \bottomrule
+  \endlastfoot
+  新增 API & 确认需求与错误语义；编写 Schema、Service、Router；同步前端类型和接口说明；补充测试 & Ruff、Mypy、Pytest、vue-tsc、Vitest \\
+  修改状态机 & 更新合法迁移；检查权限和副作用；同步枚举与页面操作；覆盖拒绝分支 & 后端测试、前端类型和构建 \\
+  修改数据库 & 更新 ORM；编写 Alembic；说明数据转换；检查单一 head；同步设计文档 & 迁移检查、Pytest、Docker build \\
+  调整页面 & 确认用户场景；修改组件、Store 与 API 调用；检查加载、空态和错误反馈 & vue-tsc、Vitest、Vite build \\
+  调整部署 & 修改环境模板或 Compose；说明变量含义、默认值和服务依赖 & Compose config、Docker build \\
 \end{longtable}
 
-持续优化可扩展覆盖率阈值、问题关闭周期、构建时长趋势、durable job 积压/延迟、
-AI 降级率与 P0 浏览器通过率，使工程度量直接服务发布与容量决策。
-
-\section{持续优化与扩展方向}
-
-\subsection{集成环境扩展}
-
-可在 MySQL 8.4 与 MinIO 环境中扩展 Alembic 升降级、并发认领/审批/双确认、
-匿名访问拒绝和角色签名链路测试。浏览器层可使用 Playwright 编排两个普通用户与
-一个管理员的发布、匹配、认领、申诉、交接和举报旅程，并将日志与截图归档到 CI。
-
-\subsection{代码与契约自动化}
-
-前端可增加 ESLint/Prettier、Vue 组件测试和覆盖率；仓库可增加 AST 架构依赖规则，
-并从 OpenAPI/权威枚举生成或校验 TypeScript 类型。事务处理可进一步统一模板、
-全局锁顺序和 MySQL deadlock 的整事务受限重试策略。
-
-\subsection{供应链与运行质量}
-
-生产化阶段可锁定基础镜像 digest，使用非 root、只读根文件系统和最小 capability；
-接入 dependency review、secret scan、SBOM、许可证与镜像扫描。运行层可增加 request ID
-跨服务传播、结构化脱敏日志、任务指标、AI 降级率、告警和备份恢复演练。
-
-\begin{table}[H]
-  \centering
-  \caption{扩展后的发布门禁}
-  \begin{tabularx}{\textwidth}{L{3.0cm}Y Y}
-    \toprule
-    门禁层 & 必须通过 & 失败处理 \\
-    \midrule
-    快速 PR & Ruff/Mypy/Pytest、vue-tsc/Vitest/build、架构依赖与契约检查 & 禁止合并，定位到模块负责人 \\
-    数据变更 & Alembic 单 head、upgrade/downgrade、MySQL 数据迁移测试、备份说明 & 要求 DBA/后端交叉 review \\
-    集成夜跑 & 完整容器、MinIO 权限、并发状态、Playwright P0 & 形成阻塞发布的缺陷记录 \\
-    发布候选 & 安全扫描、镜像、迁移、备份恢复、演示/生产 smoke & 冻结版本，不允许临时绕过 \\
-    发布后 & 健康、错误率、任务积压、AI 降级、关键旅程 & 回滚或按预案降级 \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
+当自动检查失败时，团队按任务名称定位到模块，再根据日志修正实现或测试。修正仍提交到
+原分支，由流水线重新执行完整任务。这个反馈过程将代码评审和机器检查组合起来：工具处理
+重复且可判定的规则，成员集中评审需求理解、架构边界和业务语义。
 
 \section{结论}
 
-寻迹已经形成与课程规模匹配的工程基础：monorepo 统一交付、需求与枚举文档化、Python
-strict 类型和 Ruff、双前端 TypeScript strict、四份依赖锁、线性 Alembic、五 job CI、
-分层测试与质量闭环，以及跨平台行尾和环境忽略规则。最近远端 CI 中 Backend
-200 项、AI Service 60 项、用户端 17 项和管理端 15 项测试全部通过，双前端构建与
-Backend/AI 镜像构建同步通过。
+本文说明了寻迹项目实际采用的软件工程化方法。自动化方面，项目使用依赖锁、静态检查、
+类型检查、模块测试、生产构建、容器构建、Compose 配置检查和 Alembic 迁移，并通过
+GitHub Actions 统一执行；协作化方面，项目使用轻量迭代、任务关闭准则、模块责任边界、
+分支与提交规范、Pull Request 评审以及文档和代码同步机制。
 
-至此，课程要求的「可运行、可测试、可部署、可追溯」工程化目标已形成闭环。
-持续优化可进一步扩展真实依赖集成、浏览器 E2E、自动契约、供应链加固与运行观测，
-使当前课程成果可平滑演进为更高规模的工程交付体系。
+这些方法覆盖从需求进入开发到代码合并和环境构建的全过程，使团队能够并行工作，并以
+一致的规则处理接口、数据、测试和交付变化。

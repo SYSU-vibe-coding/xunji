@@ -1,214 +1,193 @@
 \section{报告说明}
 
-本报告说明「寻迹」校园失物招领平台五人团队在需求、设计、实现、测试、演化和交付阶段的分工与贡献。团队采用模块主责、相邻协作和统一集成的工作方式，使前端、后端、AI、工程化与课程文档围绕同一业务闭环协同推进。
+本报告列出「寻迹」校园失物招领平台五名成员的角色、具体贡献和各阶段工作分配。团队按照前端、后端、AI 与匹配、质量与集成、文档与过程划分主责，并通过接口协作、交叉评审和统一集成连接各模块工作。
 
-成员姓名与 GitHub 身份由团队于 2026 年 7 月 12 日确认；除项目负责人外，报告使用成员姓名和 GitHub 身份进行识别。
+成员姓名、GitHub 身份与职责对应关系列于表 \ref{tab:members}。课程报告由朱梓涵与程文韬共同完成，最终文档提交同时标记两人的贡献。
 
-\subsection{团队目标与协作原则}
+\section{团队成员与角色}
 
-团队以「形成可演示、可测试、可部署的校园失物招领闭环」为共同目标，采用以下原则：
-
-\begin{enumerate}
-  \item 按前端、后端 A、后端 B、AI 与工程化文档划分主责，同时要求关键接口由相邻模块成员共同联调；
-  \item 需求、枚举、接口和状态机以仓库文档为共享契约，代码变更同步维护文档；
-  \item 使用 \term{main/develop/feature/fix} 分支、Pull Request 和持续集成完成协作；
-  \item 由项目负责人统一集成，模块负责人对自己负责的功能、测试和问题修复承担闭环责任；
-  \item 文档共创、评审与验收由参与成员共同署名，并在最终提交中明确记录归属。
-\end{enumerate}
-
-\section{成员与角色}
-
-\begin{longtable}{L{2.3cm}L{3.5cm}L{3.5cm}L{5.1cm}}
-\caption{团队成员与主要职责}\label{tab:members}\\
-\toprule
-成员 & GitHub 身份 & 主要角色 & 责任范围 \\
-\midrule
-\endfirsthead
-\toprule
-成员 & GitHub 身份 & 主要角色 & 责任范围 \\
-\midrule
-\endhead
-朱梓涵 & \term{handsomezhuzhu} & 项目负责人、后端 A、集成与 QA & 项目统筹；用户、认证、物品模块；核心闭环修复；CI、部署集成；与程文韬共同完成并提交文档 \\
-周星辰 & \term{stevezxc} & 前端负责人 & 用户端与管理端基础工程；Element Plus 重写；响应式布局、导航和交互反馈；前端联调 \\
-林洪宽 & \term{lin-hongkuan} & AI 与匹配负责人 & AI 服务、DashScope 接入、规则降级、图文匹配；匹配认领联调及部署协助 \\
-郭焜华 & \term{gkh-gbh} & 后端 B 负责人 & 认领、交接、通知、积分、举报和管理模块；对应迁移、接口与测试 \\
-程文韬 & \term{sptlayzner} & 文档与过程协作 & 与朱梓涵共同完成需求、设计、测试、运维及答辩材料；参与用例整理、验收检查和文档复核；期末报告提交标记二人共同完成 \\
-\bottomrule
+\begingroup
+\zihao{-5}
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{L{1.5cm}L{2.85cm}L{2.6cm}L{6.15cm}}
+  \caption{团队成员与主要职责}\label{tab:members}\\
+  \toprule
+  成员 & GitHub 身份 & 主要角色 & 责任范围 \\
+  \midrule
+  \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable（续）}\\
+  \toprule
+  成员 & GitHub 身份 & 主要角色 & 责任范围 \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endlastfoot
+  朱梓涵 & \term{handsome}\allowbreak\term{zhuzhu} & 项目负责人、后端 A、集成与质量 & 项目统筹；用户、认证、物品、上传与搜索；跨模块集成；测试组织；CI 与部署；与程文韬共同完成课程文档 \\
+  周星辰 & \term{stevezxc} & 前端负责人 & 用户端与管理端工程；页面与交互实现；响应式布局；前后端接口联调；前端测试 \\
+  林洪宽 & \term{lin-hongkuan} & AI 与匹配负责人 & AI 服务；分类、敏感检测与匹配评分；异常处理；主后端匹配联调；AI 部署配置 \\
+  郭焜华 & \term{gkh-gbh} & 后端 B 负责人 & 认领、交接、通知、积分、举报与后台治理；对应数据模型、接口、迁移和测试 \\
+  程文韬 & \term{sptlayzner} & 文档与过程协作 & 需求与计划梳理；模型和设计复核；测试用例与缺陷记录整理；运维材料和课程报告编写；与朱梓涵共同提交文档 \\
 \end{longtable}
+\endgroup
 
-\subsection{职责协作关系}
+\subsection{协作关系}
 
-图 \ref{fig:team-map} 表示主责与协作关系。项目负责人统一需求和接口基线，四个角色分别承担前端、后端 B、AI 匹配与文档过程，并在关键流程上共同联调。
+团队采用「模块主责 + 相邻协作 + 负责人集成」的组织方式。项目负责人维护需求、接口和版本基线；模块负责人承担本领域的设计、实现和测试；文档负责人将各模块信息整理为课程交付材料；涉及两个以上模块的业务流程由相关负责人共同联调。
 
 \begin{figure}[H]
-\centering
-\resizebox{0.98\textwidth}{!}{%
-\begin{tikzpicture}[x=1cm,y=1cm]
-  \node[component,fill=sysugreen!14] (lead) at (0,2.2) {朱梓涵\\统筹、后端 A、集成};
-  \node[component] (front) at (-6,0) {周星辰\\双前端};
-  \node[component] (backb) at (-2,0) {郭焜华\\后端 B};
-  \node[component] (ai) at (2,0) {林洪宽\\AI 与匹配};
-  \node[component] (docs) at (6,0) {程文韬\\文档与过程};
-  \draw[flow] (lead) -- (front);
-  \draw[flow] (lead) -- (backb);
-  \draw[flow] (lead) -- (ai);
-  \draw[flow] (lead) -- (docs);
-\end{tikzpicture}
-}
-\caption{团队主责与协作关系}
-\label{fig:team-map}
+  \centering
+  \resizebox{0.98\textwidth}{!}{%
+  \begin{tikzpicture}[x=1cm,y=1cm]
+    \node[component,fill=sysugreen!14] (lead) at (0,2.2) {朱梓涵\\统筹、后端 A、集成};
+    \node[component] (front) at (-6,0) {周星辰\\双前端};
+    \node[component] (backb) at (-2,0) {郭焜华\\后端 B};
+    \node[component] (ai) at (2,0) {林洪宽\\AI 与匹配};
+    \node[component] (docs) at (6,0) {程文韬\\文档与过程};
+    \draw[flow] (lead) -- (front);
+    \draw[flow] (lead) -- (backb);
+    \draw[flow] (lead) -- (ai);
+    \draw[flow] (lead) -- (docs);
+  \end{tikzpicture}%
+  }
+  \caption{团队主责与协作关系}
+  \label{fig:team-map}
 \end{figure}
 
-\clearpage
-\section{阶段工作分配}
+\section{各阶段工作分配}
 
+表 \ref{tab:stages} 按软件工程过程列出每个阶段的主责成员、协作成员和工作内容。表格中的「主责」表示组织该阶段并汇总产出，「协作」表示提供本模块输入、参与评审或完成联调。
+
+\begingroup
 \zihao{-5}
-\begin{longtable}{L{2.2cm}L{3.0cm}L{4.4cm}L{4.7cm}}
-\caption{软件生命周期阶段分工}\label{tab:stages}\\
-\toprule
-阶段 & 主责成员 & 协作成员 & 主要产出 \\
-\midrule
-\endfirsthead
-\toprule
-阶段 & 主责成员 & 协作成员 & 主要产出 \\
-\midrule
-\endhead
-需求与计划 & 朱梓涵、程文韬 & 全体成员 & 需求基线、优先级、WBS、进度与验收标准 \\
-系统设计 & 朱梓涵、程文韬 & 林洪宽、郭焜华、周星辰 & 系统边界、数据模型、状态机与接口方案 \\
-前端实现 & 周星辰 & 朱梓涵、郭焜华 & 用户端、管理端、共享类型、响应式界面与联调 \\
-后端 A & 朱梓涵 & 郭焜华 & 用户认证、物品、上传、搜索与对象存储 \\
-后端 B & 郭焜华 & 朱梓涵 & 认领交接、通知、积分、举报与后台管理 \\
-AI 与匹配 & 林洪宽 & 朱梓涵、郭焜华 & AI 服务、规则增强、匹配评分与后端调用 \\
-测试与修复 & 朱梓涵、程文韬 & 各模块负责人 & 测试计划、核心用例、质量修复与回归清单 \\
-部署与交付 & 朱梓涵、林洪宽 & 程文韬、周星辰 & Compose、环境模板、CI、报告与演示材料 \\
-\bottomrule
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.32}
+\begin{longtable}{L{1.65cm}L{2.3cm}L{3.45cm}L{5.9cm}}
+  \caption{软件工程各阶段工作分配}\label{tab:stages}\\
+  \toprule
+  阶段 & 主责成员 & 协作成员 & 工作内容与产出 \\
+  \midrule
+  \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable（续）}\\
+  \toprule
+  阶段 & 主责成员 & 协作成员 & 工作内容与产出 \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endlastfoot
+  项目启动 & 朱梓涵、程文韬 & 全体成员 & 明确校园失物招领场景、项目目标、成员角色、工作包和阶段安排 \\
+  需求分析 & 朱梓涵、程文韬 & 周星辰、林洪宽、郭焜华 & 梳理角色、功能需求、性能需求、可维护性需求、业务规则和优先级 \\
+  系统建模 & 朱梓涵、程文韬 & 林洪宽、郭焜华、周星辰 & 建立用例模型、领域类模型、发布序列模型和认领交接状态模型 \\
+  架构设计 & 朱梓涵、林洪宽 & 郭焜华、周星辰、程文韬 & 确定双前端、主后端、AI 服务、数据库和对象存储的边界及接口 \\
+  前端实现 & 周星辰 & 朱梓涵、郭焜华 & 实现用户端、管理端、路由、状态管理、表单交互、响应式界面和接口联调 \\
+  后端 A 实现 & 朱梓涵 & 郭焜华、林洪宽 & 实现用户、认证、失物招领、搜索、上传、对象存储和任务集成 \\
+  后端 B 实现 & 郭焜华 & 朱梓涵、周星辰 & 实现认领问答、交接、通知、积分、举报、审核与管理接口 \\
+  AI 与匹配 & 林洪宽 & 朱梓涵、郭焜华 & 实现 AI 服务、分类、敏感检测、匹配评分、规则降级与主后端调用 \\
+  测试与修复 & 朱梓涵、程文韬 & 各模块负责人 & 制定测试计划，整理核心用例，记录缺陷；由模块负责人修复并共同执行回归 \\
+  配置与交付 & 朱梓涵、程文韬 & 林洪宽、周星辰、郭焜华 & 整理环境配置、版本与部署说明、期末报告和提交材料 \\
 \end{longtable}
-\normalsize
+\endgroup
 
 \section{成员具体贡献}
 
 \subsection{朱梓涵}
 
 \begin{itemize}
-  \item 维护仓库规范、需求/架构基线、分支集成和交付节奏，组织全量质量检查与修复；
-  \item 完成后端 A 的异步 FastAPI 基础设施、用户与认证、失物/招领、上传和对象存储等模块；
-  \item 推进 durable job、AI 调用降级、敏感资源访问、管理统计、迁移和跨模块状态闭环；
-  \item 建立并修复 GitHub Actions 门禁，覆盖后端、AI、双前端与 Docker smoke；
-  \item 与程文韬共同编写需求、设计、测试、运维和课程交付文档，负责最终集成，并在期末报告提交中标记二人共同完成。
+  \item 负责项目整体规划、任务拆分、需求与接口基线、阶段集成和交付组织；
+  \item 设计并实现主后端基础结构，以及用户注册登录、校园认证、失物招领、搜索、上传和对象存储等后端 A 模块；
+  \item 完成异步任务、AI 调用衔接、敏感资源访问控制、数据库迁移和跨模块状态集成；
+  \item 组织全量测试与缺陷修复，维护后端、AI、双前端和镜像构建的自动化检查；
+  \item 与程文韬共同编写需求、建模、架构、工程化、测试、配置运维和团队报告，负责报告排版与最终 Git 集成提交。
 \end{itemize}
-
-代表性提交主题包括 \term{feat(FR-01,FR-02)}、\term{fix(ci)}、\term{fix: 修复 P0/P1 交互与安全闭环} 和核心功能迭代。
 
 \subsection{周星辰}
 
 \begin{itemize}
-  \item 初始化用户端和管理端 Vue 3/Vite/Pinia 工程，形成可独立构建的双前端；
-  \item 使用 Element Plus 重写页面和交互，统一布局、状态反馈、表单体验和视觉规范；
-  \item 改进移动端导航、返回流程、列表终态隐藏及页面反馈；
-  \item 配合后端完成认证、物品、认领和管理接口联调，并补充前端工具函数测试。
+  \item 搭建用户端与管理端 Vue 3、Vite、Pinia 工程及共享前端结构；
+  \item 使用 Element Plus 实现和统一登录、发布、搜索、详情、个人中心及管理审核页面；
+  \item 处理导航、表单校验、加载与错误反馈、移动端布局和列表交互；
+  \item 对接用户、物品、匹配、认领与管理 API，并编写前端辅助逻辑测试和构建配置。
 \end{itemize}
 
 \subsection{林洪宽}
 
 \begin{itemize}
-  \item 建立独立 AI FastAPI 服务及其配置、Schema、测试和 CI 基线；
-  \item 接入 DashScope，同时提供可重复测试的规则型分类、敏感检测和匹配降级；
-  \item 参与匹配认领闭环、主后端 AI 调用、匹配通知和异常降级联调；
-  \item 协助部署环境、AI 服务镜像及相关架构文档。
+  \item 搭建独立 AI FastAPI 服务，维护配置、请求 Schema、服务接口和模块测试；
+  \item 接入 DashScope，完成物品分类、敏感内容识别和图文匹配评分；
+  \item 设计规则型降级处理，使外部模型异常时仍能返回结构明确的结果；
+  \item 与主后端共同完成匹配调用、任务处理和通知衔接，并参与 AI 服务容器与环境配置。
 \end{itemize}
 
 \subsection{郭焜华}
 
 \begin{itemize}
-  \item 实现认领申请、问答、凭证、审核、申诉和双方交接状态流程；
-  \item 实现通知、信誉积分、举报/后台管理和操作记录等后端 B 模块；
-  \item 编写对应 ORM、Repository、Service、Router、Schema、迁移和单元测试；
-  \item 与后端 A、前端和 AI 模块共同处理匹配到认领、交接到积分的业务闭环。
+  \item 设计并实现认领申请、验证问答、认领凭证、审核、申诉和双方交接流程；
+  \item 实现站内通知、信誉积分、举报处置、后台管理和操作记录等后端 B 模块；
+  \item 为上述模块编写 ORM、Repository、Service、Router、Schema、数据库迁移和测试；
+  \item 与后端 A、用户端、管理端和匹配模块联调认领到交接、交接到积分的状态变化。
 \end{itemize}
 
 \subsection{程文韬}
 
 \begin{itemize}
-  \item 与朱梓涵共同梳理课程要求、需求基线、角色边界、功能优先级和验收标准；
-  \item 参与系统模型、架构决策、测试计划、核心用例、缺陷清单和运维方案的撰写与复核；
-  \item 将各模块负责人的实现信息整理为面向课程评审的文档和答辩材料；
-  \item 参与最终验收清单检查，统一功能、测试和交付材料的完成口径。
+  \item 与朱梓涵共同梳理课程要求、项目目标、角色边界、需求范围和阶段工作分配；
+  \item 参与用例图、领域模型、序列模型、状态模型和架构内容的整理与复核；
+  \item 整理测试计划、核心测试用例、缺陷跟踪方法和质量检查内容；
+  \item 汇总配置管理、版本控制、部署运维和各成员贡献，参与七份课程报告的编写、校对与版面检查；
+  \item 参与最终报告核对；文档工作不拆分为独立代码提交，而是在报告提交中与朱梓涵共同署名。
 \end{itemize}
 
-课程文档由朱梓涵与程文韬共同完成。七份期末报告由朱梓涵负责最终集成，Git 提交使用 \term{Co-authored-by} trailer 标记程文韬为共同作者，使文档共创在版本记录中清晰呈现。
+\section{关键交付物责任分配}
 
-\section{协作过程与提交方式}
+\begingroup
+\zihao{-5}
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{L{3.1cm}L{2.8cm}L{3.6cm}L{3.7cm}}
+  \caption{关键交付物责任分配}\label{tab:deliverables}\\
+  \toprule
+  交付物 & 主责成员 & 协作成员 & 主要内容 \\
+  \midrule
+  \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable（续）}\\
+  \toprule
+  交付物 & 主责成员 & 协作成员 & 主要内容 \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endlastfoot
+  用户、认证与物品模块 & 朱梓涵 & 周星辰、郭焜华 & 后端接口、前端接入、上传与搜索 \\
+  认领、交接与治理模块 & 郭焜华 & 朱梓涵、周星辰 & 状态流程、通知积分、举报与审核 \\
+  用户端与管理端 & 周星辰 & 朱梓涵、郭焜华 & 页面、路由、状态管理、交互与构建 \\
+  AI 服务与匹配 & 林洪宽 & 朱梓涵、郭焜华 & 分类、敏感检测、评分、调用与降级 \\
+  自动化检查与部署配置 & 朱梓涵、林洪宽 & 周星辰、郭焜华 & CI、Compose、环境模板和镜像配置 \\
+  课程报告与过程材料 & 朱梓涵、程文韬 & 全体模块负责人 & 七份报告、工作分配和提交材料 \\
+  测试计划与缺陷整理 & 朱梓涵、程文韬 & 全体模块负责人 & 测试范围、核心用例、缺陷记录与回归 \\
+\end{longtable}
+\endgroup
+
+\section{团队协作方式}
+
+\subsection{任务与接口协作}
+
+\begin{enumerate}
+  \item \textbf{工作包分解：}按用户端、管理端、后端 A、后端 B、AI、测试、部署和文档建立主责关系；
+  \item \textbf{共享契约：}需求、API、枚举和状态模型保存在仓库文档中，模块开发以同一命名和流程为准；
+  \item \textbf{相邻联调：}跨模块功能由接口提供者与调用者共同检查，例如匹配与认领、交接与积分、审核与通知；
+  \item \textbf{版本集成：}成员在功能分支完成工作，通过提交记录说明范围，由项目负责人处理跨模块集成；
+  \item \textbf{交叉复核：}模块负责人确认技术内容，朱梓涵与程文韬统一课程文档口径、排版和提交清单。
+\end{enumerate}
 
 \subsection{文档共同提交}
 
-代码提交由各模块负责人按职责完成；需求、设计、测试、运维和团队报告由朱梓涵与程文韬共同编写。最终报告提交同时记录 author 与共同作者 trailer，既保持统一集成，也完整体现文档贡献。
+课程文档由朱梓涵与程文韬共同完成。程文韬的工作集中在需求梳理、模型复核、测试与运维材料整理以及报告校对，因此团队不为其分配独立的代码功能提交。七份报告由朱梓涵统一集成提交，并在 Git 提交信息中加入：
 
-\subsection{协作实践}
+\begin{center}
+  \term{Co-authored-by: 程文韬 <278281367+sptlayzner@users.noreply.github.com>}
+\end{center}
 
-\begin{enumerate}
-  \item \textbf{任务分解：}WBS 将用户前端、管理前端、后端 A、后端 B、AI、测试与部署拆为可独立验收的工作包；
-  \item \textbf{契约先行：}接口响应、枚举、状态机、匹配和积分规则先记录在 \path{docs/}，再由各模块实现；
-  \item \textbf{分支与 PR：}功能分支合入 \term{develop}，稳定版本进入 \term{main}，通过 PR 暴露变更范围和讨论入口；
-  \item \textbf{持续集成：}每次 push/PR 触发后端、AI、双前端和容器构建门禁，最近基线共 292 项测试通过；
-  \item \textbf{集中集成：}项目负责人处理跨模块冲突、最终修复和文档提交；模块成员负责解释与验证自己的业务领域。
-\end{enumerate}
-
-\section{阶段成果与责任追踪}
-
-\begin{longtable}{L{3.4cm}L{3.2cm}L{4.0cm}L{3.5cm}}
-\caption{关键交付物责任追踪}\label{tab:deliverables}\\
-\toprule
-交付物 & 主责 & 评审/协作 & 验证方式 \\
-\midrule
-\endfirsthead
-\toprule
-交付物 & 主责 & 评审/协作 & 验证方式 \\
-\midrule
-\endhead
-用户与认证、物品 API & 朱梓涵 & 郭焜华、周星辰 & 后端单测、前端构建、API 文档 \\
-认领、交接、积分、通知 & 郭焜华 & 朱梓涵、周星辰 & 状态机测试、事务测试、页面联调 \\
-用户端与管理端 & 周星辰 & 朱梓涵、郭焜华 & 32 项前端测试、双端生产构建 \\
-AI 分类/敏感/匹配 & 林洪宽 & 朱梓涵 & 60 项 CI 测试、规则降级测试 \\
-项目文档与报告 & 朱梓涵、程文韬 & 全体模块负责人 & 文档交叉检查、报告 PDF \\
-CI 与部署环境 & 朱梓涵、林洪宽 & 程文韬 & GitHub Actions 五个 job、Compose smoke \\
-质量回归与优化 & 朱梓涵 & 全体成员 & 检查清单、回归用例、绿色 CI \\
-\bottomrule
-\end{longtable}
-
-\section{团队过程成效}
-
-\subsection{做得较好的方面}
-
-\begin{itemize}
-  \item 模块边界与责任清晰，五个成员均有明确的主责领域；
-  \item 统一技术栈和共享文档降低了前后端、AI 服务联调成本；
-  \item 通过全量质量检查和持续回归，把核心流程推进为完整可演示闭环；
-  \item 文档共创与模块复核同步进行，使七份课程报告与项目设计保持一致。
-\end{itemize}
-
-\subsection{协作经验与后续提升}
-
-\begin{itemize}
-  \item 延续 \term{Co-authored-by} 与独立 PR 方式，让代码、文档和评审贡献持续可追踪；
-  \item 进一步缩小 PR 范围并强化交叉评审，使模块集成节奏更加均衡；
-  \item 将完成定义、联调窗口和验收清单前移到每个迭代，保持稳定交付节奏；
-  \item 继续扩展数据库、对象存储和浏览器旅程测试，丰富自动化测试层次；
-  \item 使用 Issue 看板持续管理优化任务、负责人和完成时间。
-\end{itemize}
+该提交方式明确表示报告内容由朱梓涵与程文韬共同完成，同时保留各代码模块负责人的原有提交归属。
 
 \section{总结}
 
-五名成员围绕同一业务闭环形成了前端、后端、AI、工程化和文档的互补分工。朱梓涵承担统筹、后端 A 和最终集成；周星辰负责双前端；林洪宽负责 AI 与匹配；郭焜华负责后端 B；程文韬与朱梓涵共同承担文档和过程材料。团队完成了项目代码、自动化验证、部署配置和七项课程报告，实现了可演示、可测试、可部署的课程项目目标。
+团队形成了清晰的五人分工：朱梓涵负责项目统筹、后端 A、质量与集成；周星辰负责用户端和管理端；林洪宽负责 AI 服务与匹配；郭焜华负责后端 B；程文韬负责文档与过程协作。各阶段均明确主责成员、协作成员和对应产出，跨模块工作通过共享契约、相邻联调和交叉复核完成。
 
-\appendix
-\section{项目资料索引}
-
-\begin{itemize}
-  \item 团队角色与 WBS：\path{docs/project-management/wbs-and-roles.md}
-  \item 开发过程：\path{docs/project-management/development-plan.md}
-  \item 需求基线：\path{docs/project-management/requirements-baseline.md}
-  \item 协作规范：\path{CONTRIBUTING.md}、\path{AGENTS.md}、\path{CODEBUDDY.md}
-  \item CI：\path{.github/workflows/ci.yml}
-  \item 质量检查记录：\path{docs/testing/full-code-audit-2026-07-11.md}
-  \item 版本记录：\verb|git shortlog -sne --all|、\verb|git log --all --stat|
-\end{itemize}
+课程报告由朱梓涵与程文韬共同编写并共同署名提交，团队报告由此完整记录了每位成员的具体贡献、各阶段工作分配和文档提交归属。

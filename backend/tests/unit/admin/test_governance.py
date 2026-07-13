@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from app.admin.models import Report
 from app.claim.models import ClaimRequest
 from app.claim.schemas import (
+    ClaimAnswerInput,
     ClaimAppealRequest,
     ClaimReviewRequest,
     CreateClaimRequest,
@@ -15,6 +16,7 @@ from app.item.schemas import (
     CreateFoundItemRequest,
     CreateLostItemRequest,
     SubmitReportRequest,
+    VerifyQuestionInput,
 )
 from app.item.service import ItemService
 from app.match.models import MatchResult
@@ -507,7 +509,7 @@ async def test_appeal_queue_detail_and_admin_notice(
         USER,
     )
 
-    queue = await client.get("/api/v1/admin/claims", headers=admin_headers)
+    queue = await client.get("/api/v1/admin/claims?reviewStatus=APPEALING", headers=admin_headers)
     detail = await client.get(f"/api/v1/admin/claims/{claim.id}", headers=admin_headers)
     approved = await client.post(
         f"/api/v1/claims/{claim.id}/review",
@@ -519,7 +521,9 @@ async def test_appeal_queue_detail_and_admin_notice(
         headers=admin_headers,
         json={"action": "REJECT", "comment": "并发页面的过期操作"},
     )
-    refreshed_queue = await client.get("/api/v1/admin/claims", headers=admin_headers)
+    refreshed_queue = await client.get(
+        "/api/v1/admin/claims?reviewStatus=APPEALING", headers=admin_headers
+    )
     admin_notices, total = await NotificationRepository(session).list_by_user(
         user_id=ADMIN.id,
         is_read=None,
@@ -542,6 +546,68 @@ async def test_appeal_queue_detail_and_admin_notice(
     assert refreshed_queue.json()["data"]["total"] == 0
     assert total == 1
     assert admin_notices[0].related_id == claim.id
+
+
+async def test_admin_claim_overview_includes_reference_answer_snapshot(
+    client: AsyncClient,
+    admin_headers: dict[str, str],
+    session: AsyncSession,
+):
+    item_svc = ItemService(session)
+    found = await item_svc.create_found_item(
+        CreateFoundItemRequest(
+            itemName="Black umbrella",
+            category="DAILY_USE",
+            description="Wooden handle with a small decoration",
+            foundTime="2026-07-13 10:10:00",
+            foundLocation="Library third floor",
+            custodyType="SELF",
+            contactPreference="IN_APP",
+            verifyQuestions=[
+                VerifyQuestionInput(
+                    questionText="What is on the handle?",
+                    answerKeywords=["blue star sticker", "star-shaped sticker"],
+                )
+            ],
+        ),
+        STAFF,
+        BackgroundTasks(),
+    )
+    question = (await item_svc.get_verify_questions_internal(found.id))[0]
+    claim = await ClaimService(session).create_claim(
+        CreateClaimRequest(
+            foundItemId=found.id,
+            answers=[
+                ClaimAnswerInput(
+                    questionId=question.id,
+                    answerText="a blue star sticker, also described as a star-shaped sticker",
+                )
+            ],
+        ),
+        USER,
+    )
+
+    overview = await client.get("/api/v1/admin/claims", headers=admin_headers)
+    detail = await client.get(f"/api/v1/admin/claims/{claim.id}", headers=admin_headers)
+
+    assert overview.json()["data"]["total"] == 1
+    record = overview.json()["data"]["list"][0]
+    assert record["reviewStatus"] == "ANSWER_PASSED"
+    assert record["claimedAt"]
+    assert record["verificationSource"] == "KEYWORD_RULES"
+    payload = detail.json()["data"]
+    assert payload["item"]["foundLocation"] == "Library third floor"
+    assert payload["answers"] == [
+        {
+            "questionId": question.id,
+            "questionText": "What is on the handle?",
+            "answerText": "a blue star sticker, also described as a star-shaped sticker",
+            "matchScore": 100.0,
+            "referenceAnswers": ["blue star sticker", "star-shaped sticker"],
+        }
+    ]
+    assert payload["verificationSource"] == "KEYWORD_RULES"
+    assert payload["verificationDegraded"] is True
 
 
 async def test_announcement_lifecycle_visibility_and_idempotent_notification_deep_link(

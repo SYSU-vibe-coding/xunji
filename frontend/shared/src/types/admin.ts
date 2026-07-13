@@ -2,6 +2,9 @@ import type {
   AnnouncementStatus,
   CertStatus,
   ClaimReviewStatus,
+  ClaimVerificationSource,
+  ContactPreference,
+  CustodyType,
   FoundItemStatus,
   ItemCategory,
   LostItemStatus,
@@ -90,6 +93,11 @@ export interface AdminClaimItemSummary {
   id: string;
   itemName: string;
   category: ItemCategory;
+  description: string | null;
+  foundTime: string;
+  foundLocation: string;
+  custodyType: CustodyType;
+  contactPreference: ContactPreference;
   status: FoundItemStatus;
   reviewStatus: ReviewStatus;
 }
@@ -99,16 +107,25 @@ export interface AdminClaimRecord {
   foundItemId: string;
   verifyLevel: VerifyLevel;
   reviewStatus: ClaimReviewStatus;
+  verificationSource: ClaimVerificationSource;
+  verificationDegraded: boolean;
   rejectReason: string | null;
   appealReason: string | null;
   claimant: AdminPartySummary;
   finder: AdminPartySummary;
   item: AdminClaimItemSummary;
+  claimedAt: string;
   updatedAt: string;
 }
 
-export interface AdminClaimDetail extends ClaimDetail {
-  answers: ClaimAnswerOutput[];
+export interface AdminClaimAnswerOutput extends ClaimAnswerOutput {
+  referenceAnswers: string[];
+}
+
+export interface AdminClaimDetail extends Omit<ClaimDetail, 'answers'> {
+  answers: AdminClaimAnswerOutput[];
+  verificationSource: ClaimVerificationSource;
+  verificationDegraded: boolean;
   claimant: AdminPartySummary;
   finder: AdminPartySummary;
   item: AdminClaimItemSummary;

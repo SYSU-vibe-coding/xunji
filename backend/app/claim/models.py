@@ -18,6 +18,10 @@ class ClaimRequest(Base):
     review_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="PENDING", index=True
     )
+    verification_source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="NOT_REQUIRED"
+    )
+    verification_degraded: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     proof_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     appeal_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -36,6 +40,7 @@ class ClaimAnswer(Base):
     claim_id: Mapped[str] = mapped_column(String(26), nullable=False, index=True)
     question_id: Mapped[str] = mapped_column(String(26), nullable=False)
     question_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    reference_answers: Mapped[str] = mapped_column(String(1000), nullable=False, default="[]")
     answer_text: Mapped[str] = mapped_column(String(255), nullable=False)
     match_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

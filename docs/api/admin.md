@@ -73,13 +73,13 @@ REJECT 效果：对应物品 `status = CLOSED`，通知发布者。
 
 ## GET /api/v1/admin/claims
 
-管理员认领治理队列。查询参数：`reviewStatus`（默认 `APPEALING`）/ `pageNo` / `pageSize`。
+管理员认领治理队列。查询参数：`reviewStatus`（可选，不传返回全部状态）/ `pageNo` / `pageSize`。
 
-返回项包含 `appealReason`、`rejectReason`、`claimant`、`finder`、`item` 以及认领状态。管理员复用 `POST /api/v1/claims/{id}/review` 裁决申诉；仅 `APPEALING` 可由管理员裁决，`APPROVE/REJECT` 使用既有认领 CAS 状态迁移，状态已变化时返回 `44003`。
+返回项包含 `appealReason`、`rejectReason`、`claimant`、`finder`、完整招领上下文、认领时间、问答校验来源和认领状态。管理员复用 `POST /api/v1/claims/{id}/review` 裁决申诉；仅 `APPEALING` 可由管理员裁决，`APPROVE/REJECT` 使用既有认领 CAS 状态迁移，状态已变化时返回 `44003`。
 
 ## GET /api/v1/admin/claims/{id}
 
-返回管理员认领详情，包括申诉理由、原拒绝理由、问答/凭证/交接数据、双方用户摘要和物品摘要。
+返回管理员认领详情，包括申诉理由、原拒绝理由、双方用户、招领时间地点与描述、问答/凭证/交接数据。`answers[]` 在普通认领详情的基础上增加仅管理员可见的 `referenceAnswers[]`，该字段为认领提交时保存的参考答案快照；同时返回 `verificationSource`（`ClaimVerificationSource`）与 `verificationDegraded`，用于区分小模型语义校验、关键词规则降级和无需问答的记录，枚举值见 `../architecture/enums.md`。
 
 ## POST /api/v1/admin/announcements
 

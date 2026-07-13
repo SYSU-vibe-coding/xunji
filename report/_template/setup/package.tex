@@ -1,11 +1,24 @@
 \usepackage[UTF8,fontset=none]{ctex}
-\setCJKmainfont[AutoFakeBold=2]{Droid Sans Fallback}
-\setCJKsansfont[AutoFakeBold=2]{Droid Sans Fallback}
-\setCJKmonofont{Droid Sans Fallback}
-\setCJKfamilyfont{zhsong}[AutoFakeBold=2]{Droid Sans Fallback}
-\setCJKfamilyfont{zhhei}[AutoFakeBold=2]{Droid Sans Fallback}
-\setCJKfamilyfont{zhkai}{Droid Sans Fallback}
-\setCJKfamilyfont{zhfs}{Droid Sans Fallback}
+\ExplSyntaxOn
+\cs_new_eq:NN \xunjiIfWindowsTF \sys_if_platform_windows:TF
+\ExplSyntaxOff
+\xunjiIfWindowsTF{
+  \setCJKmainfont[AutoFakeBold=2]{SimSun}
+  \setCJKsansfont[AutoFakeBold=2]{Microsoft YaHei}
+  \setCJKmonofont{Microsoft YaHei}
+  \setCJKfamilyfont{zhsong}[AutoFakeBold=2]{SimSun}
+  \setCJKfamilyfont{zhhei}[AutoFakeBold=2]{Microsoft YaHei}
+  \setCJKfamilyfont{zhkai}{KaiTi}
+  \setCJKfamilyfont{zhfs}{FangSong}
+}{
+  \setCJKmainfont[AutoFakeBold=2]{Droid Sans Fallback}
+  \setCJKsansfont[AutoFakeBold=2]{Droid Sans Fallback}
+  \setCJKmonofont{Droid Sans Fallback}
+  \setCJKfamilyfont{zhsong}[AutoFakeBold=2]{Droid Sans Fallback}
+  \setCJKfamilyfont{zhhei}[AutoFakeBold=2]{Droid Sans Fallback}
+  \setCJKfamilyfont{zhkai}{Droid Sans Fallback}
+  \setCJKfamilyfont{zhfs}{Droid Sans Fallback}
+}
 \newcommand{\songti}{\CJKfamily{zhsong}}
 \newcommand{\heiti}{\CJKfamily{zhhei}}
 \newcommand{\kaishu}{\CJKfamily{zhkai}}

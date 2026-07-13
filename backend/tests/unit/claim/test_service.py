@@ -105,10 +105,13 @@ async def test_question_scoring_uses_ai_semantic_scores() -> None:
     ]
     answers = [ClaimAnswerInput(questionId="q1", answerText="贴着一颗蓝色五角星")]
 
-    scored, passed = await service._score_answers_with_ai(answers, questions)
+    scored, passed, source, degraded = await service._score_answers_with_ai(answers, questions)
 
     assert passed is True
+    assert source == "TEXT_MODEL"
+    assert degraded is False
     assert float(scored[0].match_score) == 88.0
+    assert scored[0].reference_answers == '["蓝色星星贴纸", "星形贴纸"]'
     ai_client.verify_claim_answers.assert_awaited_once()
 
 
@@ -393,8 +396,13 @@ async def test_reject_releases_found_and_match_and_detail_hides_score(session, s
 
     claimant_detail = await svc.get_claim_detail(claim.id, CLAIMANT)
     finder_detail = await svc.get_claim_detail(claim.id, FINDER)
+    admin_detail = await svc.get_admin_claim_detail(claim.id)
     assert claimant_detail.answers[0].match_score is None
     assert finder_detail.answers[0].match_score == 100
+    assert admin_detail["answers"][0]["referenceAnswers"] == ["blue"]
+    assert admin_detail["answers"][0]["answerText"] == "blue"
+    assert admin_detail["verificationSource"] == "KEYWORD_RULES"
+    assert admin_detail["verificationDegraded"] is True
 
     await svc.review_claim(
         claim.id, ClaimReviewRequest(action="REJECT", comment="需要更多凭证"), FINDER

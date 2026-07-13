@@ -84,7 +84,7 @@ export function handleReport(id: string, payload: ReportHandleRequest) {
   return http.post<{ id: string; handleStatus: string }>(`/admin/reports/${id}/handle`, payload);
 }
 
-// 认领申诉
+// 认领治理
 export function listAdminClaims(query: AdminClaimQuery = {}) {
   return http.get<PageData<AdminClaimRecord>>('/admin/claims', query as Record<string, unknown>);
 }

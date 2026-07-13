@@ -20,7 +20,7 @@ const items = [
   { key: '/dashboard', label: '总览', icon: House },
   { key: '/certifications', label: '认证审批', icon: Medal },
   { key: '/reviews', label: '内容审核', icon: Document },
-  { key: '/claim-appeals', label: '认领申诉', icon: ChatLineRound },
+  { key: '/claim-appeals', label: '认领管理', icon: ChatLineRound },
   { key: '/reports', label: '举报处理', icon: Warning },
   { key: '/announcements', label: '公告管理', icon: Bell },
   { key: '/matches', label: '匹配任务', icon: Promotion },

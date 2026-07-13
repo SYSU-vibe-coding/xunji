@@ -12,6 +12,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "${OUTPUT_DIR}"
+cp -R "${ROOT_DIR}/_template" "${TEMP_DIR}/_template"
 
 extract_diagram() {
   local source_file="$1"
@@ -52,6 +53,8 @@ render_diagram() {
     printf '%s\n' '\newcommand{\ProjectName}{寻迹校园失物招领平台}'
     printf '%s\n' '\input{_template/setup/package.tex}'
     printf '%s\n' '\input{_template/setup/format.tex}'
+    printf '%s\n' '\usepackage[active,tightpage]{preview}'
+    printf '%s\n' '\setlength{\PreviewBorder}{10pt}'
     printf '%s\n' '\tikzset{'
     printf '%s\n' '  umlclass/.style={rectangle split,rectangle split parts=2,draw=reportblue,thick,fill=blue!3,rounded corners=1pt,text width=3.25cm,minimum height=1.15cm,align=left,font=\scriptsize},'
     printf '%s\n' '  association/.style={draw=reportgray,thick},'
@@ -59,15 +62,17 @@ render_diagram() {
     printf '%s\n' '}'
     printf '%s\n' '\pagestyle{empty}'
     printf '%s\n' '\begin{document}'
+    printf '%s\n' '\begin{preview}'
     printf '%s\n' '\noindent\resizebox{0.98\textwidth}{!}{%'
     printf '%s\n' '\input{diagram-body.tex}'
     printf '%s\n' '}'
+    printf '%s\n' '\end{preview}'
     printf '%s\n' '\end{document}'
   } > "${TEMP_DIR}/diagram.tex"
 
   if ! (
     cd "${TEMP_DIR}"
-    TEXINPUTS="${ROOT_DIR}//:" xelatex \
+    xelatex \
       -interaction=nonstopmode \
       -halt-on-error \
       -file-line-error \
@@ -79,9 +84,7 @@ render_diagram() {
 
   pdftocairo -png -singlefile -r 220 \
     "${TEMP_DIR}/diagram.pdf" "${TEMP_DIR}/diagram" >/dev/null
-  magick "${TEMP_DIR}/diagram.png" -trim +repage \
-    -bordercolor white -border 20 \
-    "${OUTPUT_DIR}/${output_name}.png"
+  mv "${TEMP_DIR}/diagram.png" "${OUTPUT_DIR}/${output_name}.png"
 }
 
 render_diagram "02-系统建模报告" 1 "02-01-use-case"

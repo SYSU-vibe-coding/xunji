@@ -31,6 +31,11 @@ export type UploadBizType = Extract<BizType, 'LOST' | 'FOUND' | 'CLAIM_PROOF' | 
 
 export type MatchStatus = 'NEW' | 'READ' | 'CLAIMED' | 'EXPIRED';
 export type VerifyLevel = 'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3';
+export type ClaimVerificationSource =
+  | 'TEXT_MODEL'
+  | 'KEYWORD_RULES'
+  | 'NOT_REQUIRED'
+  | 'LEGACY_UNKNOWN';
 
 export type ClaimReviewStatus =
   | 'PENDING'

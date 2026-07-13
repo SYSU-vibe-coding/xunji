@@ -92,6 +92,10 @@ class ClaimAnswerOutput(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+class AdminClaimAnswerOutput(ClaimAnswerOutput):
+    reference_answers: list[str] = Field(default_factory=list)
+
+
 class HandoverOutput(BaseModel):
     id: str
     method: str
@@ -134,6 +138,11 @@ class ClaimItemSummary(BaseModel):
     id: str
     item_name: str
     category: str
+    description: str | None = None
+    found_time: str
+    found_location: str
+    custody_type: str
+    contact_preference: str
     status: str
     review_status: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -144,11 +153,14 @@ class AdminClaimListItem(BaseModel):
     found_item_id: str
     verify_level: str
     review_status: str
+    verification_source: str
+    verification_degraded: bool
     reject_reason: str | None = None
     appeal_reason: str | None = None
     claimant: ClaimPartySummary
     finder: ClaimPartySummary
     item: ClaimItemSummary
+    claimed_at: str
     updated_at: str
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

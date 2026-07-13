@@ -111,7 +111,7 @@ async def handle_report(
 
 @router.get("/claims")
 async def list_claims(
-    review_status: str | None = Query(default="APPEALING", alias="reviewStatus"),
+    review_status: str | None = Query(default=None, alias="reviewStatus"),
     page_no: int = Query(default=1, ge=1, alias="pageNo"),
     page_size: int = Query(default=10, ge=1, le=50, alias="pageSize"),
     admin_user: CurrentUser = Depends(require_admin()),

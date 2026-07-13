@@ -174,6 +174,8 @@
 | claimant_id | char(26) | 认领人 |
 | verify_level | varchar(20) | 见 `enums.md` VerifyLevel |
 | review_status | varchar(20) | 见 `enums.md` ClaimReviewStatus |
+| verification_source | varchar(32) | 问答校验来源：小模型、关键词降级或无需校验 |
+| verification_degraded | tinyint | 问答校验是否发生降级 |
 | reject_reason | varchar(255) | 拒绝原因 |
 | proof_text | varchar(500) | 认领者补充凭证说明 |
 | appeal_reason | varchar(500) | 申诉理由 |
@@ -188,6 +190,7 @@
 | claim_id | char(26) | 认领请求 |
 | question_id | char(26) | 验证问题 |
 | question_text | varchar(255) | 验证问题文本快照 |
+| reference_answers | varchar(1000) | 认领提交时的参考答案 JSON 快照，仅管理员治理接口可见 |
 | answer_text | varchar(255) | 用户回答 |
 | match_score | decimal(5,2) | 回答匹配度 |
 | created_at | datetime | 创建时间 |

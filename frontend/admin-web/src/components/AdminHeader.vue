@@ -13,7 +13,7 @@ const titleMap: Record<string, string> = {
   '/dashboard': '总览',
   '/certifications': '认证审批',
   '/reviews': '内容审核',
-  '/claim-appeals': '认领申诉',
+  '/claim-appeals': '认领管理',
   '/reports': '举报处理',
   '/announcements': '公告管理',
   '/matches': '匹配任务',

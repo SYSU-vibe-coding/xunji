@@ -80,6 +80,16 @@
 
 判定规则见 `matching-rules.md §5`。
 
+### ClaimVerificationSource（`claim_requests.verification_source`）
+| 值 | 说明 |
+|---|---|
+| TEXT_MODEL | 小模型语义校验 |
+| KEYWORD_RULES | 小模型不可用时的关键词规则校验 |
+| NOT_REQUIRED | 本次认领无需问答校验 |
+| LEGACY_UNKNOWN | 字段上线前的历史认领，无法可靠还原校验来源 |
+
+`verification_degraded = 1` 表示本次问答校验使用了降级路径；历史记录也按降级展示，避免误标为模型结果。
+
 ### ClaimReviewStatus（`claim_requests.review_status`）
 | 值 | 说明 |
 |---|---|

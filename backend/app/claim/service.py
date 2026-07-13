@@ -14,6 +14,7 @@ from app.claim.repository import (
     HandoverRecordRepository,
 )
 from app.claim.schemas import (
+    AdminClaimAnswerOutput,
     AdminClaimListItem,
     ClaimAnswerInput,
     ClaimAnswerOutput,
@@ -105,12 +106,17 @@ class ClaimService:
         )
         scored_answers: list[ClaimAnswer] = []
         answers_passed = True
+        verification_source = "NOT_REQUIRED"
+        verification_degraded = False
         if preview_verify_level in {"LEVEL_1", "LEVEL_2"}:
             self._validate_answer_set(req.answers, preview_questions)
             if preview_questions:
-                scored_answers, answers_passed = await self._score_answers_with_ai(
-                    req.answers, preview_questions
-                )
+                (
+                    scored_answers,
+                    answers_passed,
+                    verification_source,
+                    verification_degraded,
+                ) = await self._score_answers_with_ai(req.answers, preview_questions)
         question_fingerprint = self._question_fingerprint(preview_questions)
 
         found_item = await self._item_svc.get_found_item_for_update_internal(req.found_item_id)
@@ -185,6 +191,8 @@ class ClaimService:
             claimant_id=current_user.id,
             verify_level=verify_level,
             review_status=review_status,
+            verification_source=verification_source,
+            verification_degraded=int(verification_degraded),
             reject_reason=VERIFY_FAILURE_REASON if review_status == "REJECTED" else None,
             claimed_at=now_beijing().replace(tzinfo=None),
         )
@@ -486,11 +494,24 @@ class ClaimService:
         detail = (
             await self._to_detail(claim, CurrentUser(id="SYSTEM", role="ADMIN", status="ACTIVE"))
         ).model_dump(by_alias=True)
+        stored_answers = await self._answer_repo.get_by_claim_id(claim.id)
+        detail["answers"] = [
+            AdminClaimAnswerOutput(
+                question_id=answer.question_id,
+                question_text=answer.question_text,
+                reference_answers=self._parse_reference_answers(answer.reference_answers),
+                answer_text=answer.answer_text,
+                match_score=float(answer.match_score),
+            ).model_dump(by_alias=True)
+            for answer in stored_answers
+        ]
         summary = (await self._to_admin_list_item(claim)).model_dump(by_alias=True)
         detail.update(
             claimant=summary["claimant"],
             finder=summary["finder"],
             item=summary["item"],
+            verificationSource=summary["verificationSource"],
+            verificationDegraded=summary["verificationDegraded"],
         )
         return detail
 
@@ -718,6 +739,7 @@ class ClaimService:
                     claim_id="",
                     question_id=question.id,
                     question_text=question.question_text,
+                    reference_answers=question.answer_keywords,
                     answer_text=answer_text,
                     match_score=score,
                 )
@@ -727,9 +749,10 @@ class ClaimService:
 
     async def _score_answers_with_ai(
         self, claim_answers: list[ClaimAnswerInput], questions: list[Any]
-    ) -> tuple[list[ClaimAnswer], bool]:
+    ) -> tuple[list[ClaimAnswer], bool, str, bool]:
         if self._ai_client is None:
-            return self._score_answers(claim_answers, questions)
+            answers, passed = self._score_answers(claim_answers, questions)
+            return answers, passed, "KEYWORD_RULES", True
         answer_by_question = {answer.question_id: answer.answer_text for answer in claim_answers}
         payload = []
         for question in questions:
@@ -744,13 +767,15 @@ class ClaimService:
         result = await self._ai_client.verify_claim_answers(payload)
         if result is None:
             logger.warning("[claim-answer] AI unavailable, using keyword rules")
-            return self._score_answers(claim_answers, questions)
+            answers, passed = self._score_answers(claim_answers, questions)
+            return answers, passed, "KEYWORD_RULES", True
         answers = [
             ClaimAnswer(
                 id=generate_ulid(),
                 claim_id="",
                 question_id=question.id,
                 question_text=question.question_text,
+                reference_answers=question.answer_keywords,
                 answer_text=answer_by_question.get(question.id, ""),
                 match_score=Decimal(str(score)).quantize(Decimal("0.01")),
             )
@@ -763,7 +788,12 @@ class ClaimService:
             result["passed"],
             len(questions),
         )
-        return answers, bool(result["passed"])
+        return (
+            answers,
+            bool(result["passed"]),
+            str(result["source"]),
+            bool(result["degraded"]),
+        )
 
     @staticmethod
     def _question_fingerprint(questions: list[Any]) -> tuple[tuple[str, str, str], ...]:
@@ -771,6 +801,16 @@ class ClaimService:
             (question.id, question.question_text, question.answer_keywords)
             for question in questions
         )
+
+    @staticmethod
+    def _parse_reference_answers(raw: str) -> list[str]:
+        try:
+            values = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return []
+        if not isinstance(values, list):
+            return []
+        return [str(value) for value in values]
 
     async def _enforce_verification_attempt_limit(
         self, claimant_id: str, found_item_id: str
@@ -987,6 +1027,8 @@ class ClaimService:
             found_item_id=claim.found_item_id,
             verify_level=claim.verify_level,
             review_status=claim.review_status,
+            verification_source=claim.verification_source,
+            verification_degraded=bool(claim.verification_degraded),
             reject_reason=claim.reject_reason,
             appeal_reason=claim.appeal_reason,
             claimant=ClaimPartySummary(
@@ -1005,8 +1047,14 @@ class ClaimService:
                 id=found_item.id,
                 item_name=found_item.item_name,
                 category=found_item.category,
+                description=found_item.description,
+                found_time=format_beijing(found_item.found_time),
+                found_location=found_item.found_location,
+                custody_type=found_item.custody_type,
+                contact_preference=found_item.contact_preference,
                 status=found_item.status,
                 review_status=found_item.review_status,
             ),
+            claimed_at=format_beijing(claim.claimed_at),
             updated_at=format_beijing(claim.updated_at),
         )

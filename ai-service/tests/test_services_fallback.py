@@ -14,8 +14,9 @@ from app.schemas import (
     ClassifyItemRequest,
     DetectSensitiveRequest,
     MatchItem,
+    VerifyClaimAnswersRequest,
 )
-from app.services import classify, match, sensitive
+from app.services import answer, classify, match, sensitive
 
 
 @pytest.fixture
@@ -151,6 +152,48 @@ async def test_match_model_failure_marks_fallback_source() -> None:
     resp = await match.calculate_match(req, client)
     assert resp.degraded is True
     assert resp.score_source == "RULE_BASED"
+
+
+@pytest.mark.asyncio
+async def test_claim_answer_uses_semantic_model_score() -> None:
+    client = MagicMock(spec=DashScopeClient)
+    client.claim_answer_scores = AsyncMock(return_value=[92.0])
+    req = VerifyClaimAnswersRequest(
+        answers=[
+            {
+                "questionText": "伞柄上有什么特征",
+                "referenceAnswers": ["蓝色星星贴纸", "星形贴纸"],
+                "answerText": "木头把手贴着一颗蓝色五角星",
+            }
+        ]
+    )
+
+    resp = await answer.verify_claim_answers(req, client)
+
+    assert resp.passed is True
+    assert resp.scores == [92.0]
+    assert resp.degraded is False
+    assert resp.source == "TEXT_MODEL"
+
+
+@pytest.mark.asyncio
+async def test_claim_answer_falls_back_to_keyword_rules() -> None:
+    req = VerifyClaimAnswersRequest(
+        answers=[
+            {
+                "questionText": "伞柄上有什么特征",
+                "referenceAnswers": ["蓝色星星贴纸", "星形贴纸"],
+                "answerText": "蓝色星星贴纸",
+            }
+        ]
+    )
+
+    resp = await answer.verify_claim_answers(req, None)
+
+    assert resp.passed is False
+    assert resp.scores == [50.0]
+    assert resp.degraded is True
+    assert resp.source == "KEYWORD_RULES"
 
 
 def test_classify_parses_dashscope_reply() -> None:

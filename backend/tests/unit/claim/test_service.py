@@ -1,5 +1,6 @@
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from app.claim.models import ClaimRequest
@@ -79,6 +80,36 @@ def test_question_scoring_can_pass_by_average_not_every_question() -> None:
     _, passed = service._score_answers(answers, questions)
 
     assert passed is True
+
+
+@pytest.mark.asyncio
+async def test_question_scoring_uses_ai_semantic_scores() -> None:
+    ai_client = SimpleNamespace(
+        verify_claim_answers=AsyncMock(
+            return_value={
+                "scores": [88.0],
+                "passed": True,
+                "degraded": False,
+                "source": "TEXT_MODEL",
+            }
+        )
+    )
+    service = object.__new__(ClaimService)
+    service._ai_client = ai_client
+    questions = [
+        SimpleNamespace(
+            id="q1",
+            question_text="伞柄上有什么特征",
+            answer_keywords='["蓝色星星贴纸", "星形贴纸"]',
+        )
+    ]
+    answers = [ClaimAnswerInput(questionId="q1", answerText="贴着一颗蓝色五角星")]
+
+    scored, passed = await service._score_answers_with_ai(answers, questions)
+
+    assert passed is True
+    assert float(scored[0].match_score) == 88.0
+    ai_client.verify_claim_answers.assert_awaited_once()
 
 
 async def test_claim_handover_flow_updates_credit_and_status(session, seeded_users):

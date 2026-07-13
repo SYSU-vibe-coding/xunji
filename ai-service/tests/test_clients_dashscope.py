@@ -96,6 +96,51 @@ async def test_text_embedding_count_mismatch_returns_none() -> None:
 
 
 @pytest.mark.asyncio
+async def test_claim_answer_embeddings_allow_paraphrase_and_cap_contradiction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_MODEL", "")
+    monkeypatch.setattr(settings, "TEXT_EMBEDDING_MODEL", "test-embedding")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/embeddings"
+        body = {
+            "data": [
+                {"index": 0, "embedding": [1.0, 0.0]},
+                {"index": 1, "embedding": [0.95, 0.05]},
+                {"index": 2, "embedding": [1.0, 0.0]},
+                {"index": 3, "embedding": [1.0, 0.0]},
+            ]
+        }
+        return httpx.Response(200, content=json.dumps(body))
+
+    client = DashScopeClient(
+        api_key="fake",
+        base_url="https://example.com/v1",
+        transport=httpx.MockTransport(handler),
+    )
+    checks = [
+        {
+            "question": "伞柄上有什么特征",
+            "referenceAnswers": ["蓝色星星贴纸"],
+            "userAnswer": "把手贴着一颗蓝色五角星",
+        },
+        {
+            "question": "伞柄上有什么特征",
+            "referenceAnswers": ["蓝色星星贴纸"],
+            "userAnswer": "没有任何贴纸",
+        },
+    ]
+    try:
+        scores = await client.claim_answer_scores(checks)
+        assert scores is not None
+        assert scores[0] > 90
+        assert scores[1] == 20
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_vl_understand_success() -> None:
     def provider_handler(request: httpx.Request) -> httpx.Response:
         return _vl_response("CERT")

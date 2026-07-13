@@ -9,6 +9,7 @@ Category = Literal["CERT", "ELECTRONIC", "DAILY_USE", "BOOK", "OTHER"]
 SensitiveType = Literal["ID_CARD", "BANK_CARD", "CAMPUS_CARD", "OTHER"]
 ClassifySource = Literal["KEYWORD_RULES", "VISION_MODEL"]
 MatchScoreSource = Literal["RULE_BASED", "TEXT_MODEL_RULES", "MULTIMODAL_MODEL"]
+AnswerVerifySource = Literal["KEYWORD_RULES", "TEXT_MODEL"]
 Score = Annotated[float, Field(ge=0.0, le=100.0)]
 ImageUrl = Annotated[str, AfterValidator(validate_image_url)]
 Tag = Annotated[str, Field(min_length=1, max_length=20)]
@@ -79,4 +80,24 @@ class CalculateMatchResponse(BaseModel):
     image_available: bool
     degraded: bool
     score_source: MatchScoreSource
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class ClaimAnswerCheck(BaseModel):
+    question_text: str = Field(..., min_length=1, max_length=100)
+    reference_answers: list[str] = Field(..., min_length=1, max_length=10)
+    answer_text: str = Field(..., min_length=1, max_length=200)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class VerifyClaimAnswersRequest(BaseModel):
+    answers: list[ClaimAnswerCheck] = Field(..., min_length=1, max_length=3)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class VerifyClaimAnswersResponse(BaseModel):
+    scores: list[Score] = Field(..., min_length=1, max_length=3)
+    passed: bool
+    degraded: bool
+    source: AnswerVerifySource
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

@@ -22,6 +22,7 @@ from app.match.scoring import normalized_total
 
 MATCH_SCORE_SOURCES = {"RULE_BASED", "TEXT_MODEL_RULES", "MULTIMODAL_MODEL"}
 ITEM_CATEGORIES = {"CERT", "ELECTRONIC", "DAILY_USE", "BOOK", "OTHER"}
+ANSWER_VERIFY_SOURCES = {"KEYWORD_RULES", "TEXT_MODEL"}
 
 
 class AIClient:
@@ -177,6 +178,36 @@ class AIClient:
             {"imageUrl": image_url},
             expected_keys=("isSensitive",),
         )
+
+    async def verify_claim_answers(self, answers: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not 1 <= len(answers) <= 3:
+            return None
+        data = await self._post(
+            "/internal/ai/verify-claim-answers",
+            {"answers": answers},
+            expected_keys=("scores", "passed", "degraded", "source"),
+        )
+        if data is None:
+            return None
+        scores = data["scores"]
+        if not isinstance(scores, list) or len(scores) != len(answers):
+            return None
+        normalized_scores: list[float] = []
+        for value in scores:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int | float)
+                or not math.isfinite(float(value))
+                or not 0 <= float(value) <= 100
+            ):
+                return None
+            normalized_scores.append(float(value))
+        if not isinstance(data["passed"], bool) or not isinstance(data["degraded"], bool):
+            return None
+        source = data["source"]
+        if not isinstance(source, str) or source not in ANSWER_VERIFY_SOURCES:
+            return None
+        return {**data, "scores": normalized_scores}
 
     # ------------------------------------------------------------------
     # Internal

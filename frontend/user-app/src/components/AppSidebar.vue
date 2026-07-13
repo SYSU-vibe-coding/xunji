@@ -303,9 +303,14 @@ function pickPublish(path: string) {
   }
 
   .menu-badge {
-    margin-left: var(--xunji-space-2);
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    margin-left: auto;
 
     :deep(.el-badge__content) {
+      position: static;
+      transform: none;
       line-height: 18px;
     }
   }

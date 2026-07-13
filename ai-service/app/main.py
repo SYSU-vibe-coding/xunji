@@ -28,8 +28,10 @@ from app.schemas import (
     ClassifyItemResponse,
     DetectSensitiveRequest,
     DetectSensitiveResponse,
+    VerifyClaimAnswersRequest,
+    VerifyClaimAnswersResponse,
 )
-from app.services import classify, match, sensitive
+from app.services import answer, classify, match, sensitive
 
 
 @asynccontextmanager
@@ -98,6 +100,12 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
         req: CalculateMatchRequest, request: Request
     ) -> CalculateMatchResponse:
         return await match.calculate_match(req, _client(request))
+
+    @internal.post("/verify-claim-answers")
+    async def verify_claim_answers_endpoint(
+        req: VerifyClaimAnswersRequest, request: Request
+    ) -> VerifyClaimAnswersResponse:
+        return await answer.verify_claim_answers(req, _client(request))
 
     app.include_router(internal)
     return app

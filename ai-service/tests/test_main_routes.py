@@ -86,6 +86,28 @@ def test_calculate_match_route_runs_baseline() -> None:
         assert body["scoreSource"] == "RULE_BASED"
 
 
+def test_verify_claim_answers_route_runs_baseline() -> None:
+    with TestClient(create_app()) as client:
+        resp = client.post(
+            "/internal/ai/verify-claim-answers",
+            json={
+                "answers": [
+                    {
+                        "questionText": "伞柄上有什么特征",
+                        "referenceAnswers": ["蓝色星星贴纸"],
+                        "answerText": "有蓝色星星贴纸",
+                    }
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["scores"] == [100]
+        assert body["passed"] is True
+        assert body["degraded"] is True
+        assert body["source"] == "KEYWORD_RULES"
+
+
 def test_detect_sensitive_route() -> None:
     with TestClient(create_app()) as client:
         resp = client.post(

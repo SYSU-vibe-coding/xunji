@@ -78,14 +78,16 @@ return base
 ## 6. 一级问答判定
 
 ```
+answers = POST /internal/ai/verify-claim-answers
 for each question in found_item.verify_questions:
-    answer = claim.answers[question.id]
-    score = keyword_hit_ratio(answer.text, question.answer_keywords)
-if avg(scores) >= 0.6:  通过
-else:                    不通过，状态置 REJECTED，允许申诉
+    score = semantic_score(question, private_reference_answers, user_answer)
+if avg(scores) >= 60:  通过
+else:                  不通过，状态置 REJECTED，允许申诉
 ```
 
-`keyword_hit_ratio` = 命中关键词数 / 关键词总数。
+语义评分优先使用文本向量覆盖同义词、口语化表达、语序变化和轻微错字；明确的“有/没有”否定以及颜色冲突由确定性规则将分数封顶为 20，避免高词面相似度掩盖事实矛盾。最多 3 道题在一次内部调用中批量评分，外部模型调用发生在数据库行锁之前，锁定后重新确认验证问题与用户验证等级未变化。
+
+AI 服务超时、非 2xx、响应无法解析或模型未配置时，回退到原关键词规则：`keyword_hit_ratio = 命中关键词数 / 关键词总数`，平均命中率 `>=0.6` 通过。回退不阻塞认领流程。
 
 失败仅返回统一的“验证未通过，请稍后重试”，不向认领者返回逐题分数或关键词命中情况。同一 `claimant + foundItem` 失败后冷却 5 分钟，滚动 24 小时最多失败 3 次；限制数据由失败认领记录持久化统计。
 

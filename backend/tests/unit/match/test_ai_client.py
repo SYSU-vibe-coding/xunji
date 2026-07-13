@@ -159,3 +159,65 @@ async def test_detect_sensitive_returns_payload() -> None:
         assert data["maskedImageUrl"].endswith("masked=1")
     finally:
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_verify_claim_answers_validates_payload() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/internal/ai/verify-claim-answers"
+        return _ok(
+            {
+                "scores": [91.5],
+                "passed": True,
+                "degraded": False,
+                "source": "TEXT_MODEL",
+            }
+        )
+
+    client = AIClient(transport=httpx.MockTransport(handler))
+    try:
+        data = await client.verify_claim_answers(
+            [
+                {
+                    "questionText": "伞柄上有什么特征",
+                    "referenceAnswers": ["蓝色星星贴纸"],
+                    "answerText": "贴着蓝色五角星",
+                }
+            ]
+        )
+        assert data is not None
+        assert data["scores"] == [91.5]
+        assert data["source"] == "TEXT_MODEL"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_verify_claim_answers_rejects_score_count_mismatch() -> None:
+    client = AIClient(
+        transport=httpx.MockTransport(
+            lambda _request: _ok(
+                {
+                    "scores": [],
+                    "passed": True,
+                    "degraded": False,
+                    "source": "TEXT_MODEL",
+                }
+            )
+        )
+    )
+    try:
+        assert (
+            await client.verify_claim_answers(
+                [
+                    {
+                        "questionText": "问题",
+                        "referenceAnswers": ["答案"],
+                        "answerText": "回答",
+                    }
+                ]
+            )
+            is None
+        )
+    finally:
+        await client.aclose()

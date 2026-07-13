@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
+from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +36,7 @@ from app.claim.schemas import (
 from app.common.errors import BizError, ErrorCode
 from app.common.pagination import PaginationParams, paginate
 from app.common.utils import format_beijing, now_beijing
+from app.core.ai_client import AIClient
 from app.credit.service import CreditService
 from app.db.ulid import generate_ulid
 from app.item.service import ItemService
@@ -61,7 +63,7 @@ def determine_verify_level(found_category: str, credit_score: int) -> str:
 
 
 class ClaimService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, ai_client: AIClient | None = None) -> None:
         self._session = session
         self._claim_repo = ClaimRequestRepository(session)
         self._answer_repo = ClaimAnswerRepository(session)
@@ -72,6 +74,7 @@ class ClaimService:
         self._notification_svc = NotificationService(session)
         self._credit_svc = CreditService(session)
         self._log_svc = OperationLogService(session)
+        self._ai_client = ai_client
 
     async def create_claim(
         self, req: CreateClaimRequest, current_user: CurrentUser
@@ -82,15 +85,40 @@ class ClaimService:
             match_preview = await self._match_svc.get_by_id(req.match_id)
             if match_preview is None or match_preview.found_item_id != req.found_item_id:
                 raise BizError(ErrorCode.MATCH_NOT_FOUND)
-            lost_item = await self._item_svc.get_lost_item_for_update_internal(
-                match_preview.lost_item_id
-            )
+
+        found_preview = await self._item_svc.get_found_item_internal(req.found_item_id)
+        claimant_preview = await self._user_svc.get_user_internal(current_user.id)
+        if claimant_preview is None or claimant_preview.status != "ACTIVE":
+            raise BizError(ErrorCode.UNAUTHORIZED)
+        if claimant_preview.credit_score < 30:
+            raise BizError(ErrorCode.CREDIT_FROZEN)
+        if found_preview.status != "PENDING" or found_preview.review_status != "APPROVED":
+            raise BizError(ErrorCode.ITEM_CLOSED)
+        if found_preview.user_id == current_user.id:
+            raise BizError(ErrorCode.CLAIM_NOT_PARTY, "不可认领自己发布的招领")
+        if await self._claim_repo.has_active_claim(req.found_item_id):
+            raise BizError(ErrorCode.CLAIM_DUPLICATE)
+        await self._enforce_verification_attempt_limit(current_user.id, found_preview.id)
+        preview_questions = await self._item_svc.get_verify_questions_internal(req.found_item_id)
+        preview_verify_level = determine_verify_level(
+            found_preview.category, claimant_preview.credit_score
+        )
+        scored_answers: list[ClaimAnswer] = []
+        answers_passed = True
+        if preview_verify_level in {"LEVEL_1", "LEVEL_2"}:
+            self._validate_answer_set(req.answers, preview_questions)
+            if preview_questions:
+                scored_answers, answers_passed = await self._score_answers_with_ai(
+                    req.answers, preview_questions
+                )
+        question_fingerprint = self._question_fingerprint(preview_questions)
 
         found_item = await self._item_svc.get_found_item_for_update_internal(req.found_item_id)
         if req.match_id:
             match = await self._match_svc.get_by_id_for_update(req.match_id)
             if match is None or match.found_item_id != req.found_item_id:
                 raise BizError(ErrorCode.MATCH_NOT_FOUND)
+            lost_item = await self._item_svc.get_lost_item_for_update_internal(match.lost_item_id)
 
         locked_users = {}
         for user_id in sorted({current_user.id, found_item.user_id}):
@@ -123,17 +151,20 @@ class ClaimService:
 
         questions = await self._item_svc.get_verify_questions_internal(req.found_item_id)
         verify_level = determine_verify_level(found_item.category, user.credit_score)
-        await self._enforce_verification_attempt_limit(current_user.id, found_item.id)
+        if (
+            verify_level != preview_verify_level
+            or self._question_fingerprint(questions) != question_fingerprint
+        ):
+            raise BizError(ErrorCode.CLAIM_INVALID_STATE, "验证问题已更新, 请重新提交")
         await self._item_svc.validate_image_refs_internal(
             req.proof_image_urls,
             uploader_id=current_user.id,
             biz_type="CLAIM_PROOF",
         )
-        if verify_level in {"LEVEL_1", "LEVEL_2"}:
-            self._validate_answer_set(req.answers, questions)
         review_status, answers = self._build_initial_claim_state(
             verify_level=verify_level,
-            claim_answers=req.answers,
+            scored_answers=scored_answers,
+            answers_passed=answers_passed,
             questions=questions,
             proof_image_urls=req.proof_image_urls,
         )
@@ -633,15 +664,14 @@ class ClaimService:
         self,
         *,
         verify_level: str,
-        claim_answers: list[ClaimAnswerInput],
+        scored_answers: list[ClaimAnswer],
+        answers_passed: bool,
         questions: list[Any],
         proof_image_urls: list[str],
     ) -> tuple[str, list[ClaimAnswer]]:
-        answers: list[ClaimAnswer] = []
-        if verify_level in {"LEVEL_1", "LEVEL_2"} and questions:
-            answers, passed = self._score_answers(claim_answers, questions)
-            if not passed:
-                return "REJECTED", answers
+        answers = scored_answers
+        if verify_level in {"LEVEL_1", "LEVEL_2"} and questions and not answers_passed:
+            return "REJECTED", answers
         if verify_level == "LEVEL_1":
             return "ANSWER_PASSED", answers
         if not proof_image_urls:
@@ -694,6 +724,53 @@ class ClaimService:
             )
         average = sum(ratios, Decimal("0")) / Decimal(len(ratios)) if ratios else Decimal("1")
         return results, average >= Decimal("0.6")
+
+    async def _score_answers_with_ai(
+        self, claim_answers: list[ClaimAnswerInput], questions: list[Any]
+    ) -> tuple[list[ClaimAnswer], bool]:
+        if self._ai_client is None:
+            return self._score_answers(claim_answers, questions)
+        answer_by_question = {answer.question_id: answer.answer_text for answer in claim_answers}
+        payload = []
+        for question in questions:
+            references = json.loads(question.answer_keywords)
+            payload.append(
+                {
+                    "questionText": question.question_text,
+                    "referenceAnswers": [str(value) for value in references],
+                    "answerText": answer_by_question.get(question.id, ""),
+                }
+            )
+        result = await self._ai_client.verify_claim_answers(payload)
+        if result is None:
+            logger.warning("[claim-answer] AI unavailable, using keyword rules")
+            return self._score_answers(claim_answers, questions)
+        answers = [
+            ClaimAnswer(
+                id=generate_ulid(),
+                claim_id="",
+                question_id=question.id,
+                question_text=question.question_text,
+                answer_text=answer_by_question.get(question.id, ""),
+                match_score=Decimal(str(score)).quantize(Decimal("0.01")),
+            )
+            for question, score in zip(questions, result["scores"], strict=True)
+        ]
+        logger.info(
+            "[claim-answer] verification source={} degraded={} passed={} questions={}",
+            result["source"],
+            result["degraded"],
+            result["passed"],
+            len(questions),
+        )
+        return answers, bool(result["passed"])
+
+    @staticmethod
+    def _question_fingerprint(questions: list[Any]) -> tuple[tuple[str, str, str], ...]:
+        return tuple(
+            (question.id, question.question_text, question.answer_keywords)
+            for question in questions
+        )
 
     async def _enforce_verification_attempt_limit(
         self, claimant_id: str, found_item_id: str

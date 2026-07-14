@@ -23,7 +23,7 @@ const props = withDefaults(
     accept?: string;
     sizeLimitMb?: number;
   }>(),
-  { max: 5, accept: 'image/*', sizeLimitMb: 10 },
+  { max: 5, accept: 'image/*', sizeLimitMb: 20 },
 );
 
 const emit = defineEmits<{

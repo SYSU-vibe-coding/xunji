@@ -35,15 +35,20 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
     command: server /data --console-address ":9001"
     ports:
-      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   ai-service:
     build:
-      context: ../..
-      dockerfile: ai-service/Dockerfile
+      context: ../../ai-service
+      dockerfile: Dockerfile
     image: xunji/ai-service:local
     container_name: xunji-ai-service
     restart: unless-stopped
@@ -72,8 +77,8 @@ services:
 
   backend:
     build:
-      context: ../..
-      dockerfile: backend/Dockerfile
+      context: ../../backend
+      dockerfile: Dockerfile
     image: xunji/backend:local
     container_name: xunji-backend
     restart: unless-stopped
@@ -122,7 +127,7 @@ services:
       ai-service:
         condition: service_started
       minio:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     healthcheck:
@@ -137,8 +142,8 @@ services:
 
   user-web:
     build:
-      context: ../..
-      dockerfile: frontend/user-app/Dockerfile
+      context: ../../frontend
+      dockerfile: user-app/Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
     image: xunji/user-web:local
@@ -146,14 +151,14 @@ services:
     restart: unless-stopped
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${USER_WEB_PORT:-18080}:80"
 
   admin-web:
     build:
-      context: ../..
-      dockerfile: frontend/admin-web/Dockerfile
+      context: ../../frontend
+      dockerfile: admin-web/Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
     image: xunji/admin-web:local
@@ -161,7 +166,7 @@ services:
     restart: unless-stopped
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${ADMIN_WEB_PORT:-18081}:80"
 

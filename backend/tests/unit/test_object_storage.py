@@ -4,7 +4,7 @@ from datetime import timedelta
 import pytest
 from app.common.errors import BizError, ErrorCode
 from app.core.config import settings
-from app.core.object_storage import get_object_storage, sanitize_image
+from app.core.object_storage import MAX_UPLOAD_BYTES, get_object_storage, sanitize_image
 from app.item.service import ItemService
 from app.user.schemas import CurrentUser
 from fastapi import UploadFile
@@ -79,6 +79,11 @@ def test_invalid_image_payload_and_excessive_pixels_are_rejected() -> None:
     with pytest.raises(BizError) as oversized:
         sanitize_image(_png_bytes(), max_pixels=95)
     assert oversized.value.code == ErrorCode.UPLOAD_FAILED
+
+    with pytest.raises(BizError) as too_large:
+        sanitize_image(b"x" * (MAX_UPLOAD_BYTES + 1), max_pixels=1_000)
+    assert too_large.value.code == ErrorCode.UPLOAD_FAILED
+    assert "20MB" in too_large.value.message
 
 
 async def test_new_asset_references_enforce_owner_and_reject_external_urls(mock_minio) -> None:

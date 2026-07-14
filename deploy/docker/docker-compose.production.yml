@@ -4,3 +4,8 @@ services:
 
   minio:
     ports: !reset []
+
+  backend:
+    environment:
+      # Production must provide an HTTPS object-storage URL reachable by browsers.
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PRODUCTION_PUBLIC_BASE_URL:?MINIO_PRODUCTION_PUBLIC_BASE_URL must be browser-reachable in production}

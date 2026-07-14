@@ -44,10 +44,10 @@ podman --root /tmp/xunji-podman-root --runroot /tmp/xunji-podman-runroot info
 If rootless Podman cannot start `aardvark-dns` because the user DBus session is unavailable, use the host-network compose file after building the four local app images:
 
 ```bash
-podman build -f backend/Dockerfile -t xunji/backend:local .
-podman build -f ai-service/Dockerfile -t xunji/ai-service:local .
-podman build -f frontend/user-app/Dockerfile -t xunji/user-web:local .
-podman build -f frontend/admin-web/Dockerfile -t xunji/admin-web:local .
+podman build -f backend/Dockerfile -t xunji/backend:local backend
+podman build -f ai-service/Dockerfile -t xunji/ai-service:local ai-service
+podman build -f frontend/user-app/Dockerfile -t xunji/user-web:local frontend
+podman build -f frontend/admin-web/Dockerfile -t xunji/admin-web:local frontend
 podman compose -f deploy/docker/docker-compose.podman-host.yml up -d
 ```
 
@@ -67,6 +67,17 @@ MySQL and MinIO host ports bind to `127.0.0.1` by default. In a deployment where
 ```bash
 docker compose -f deploy/docker/docker-compose.yml -f deploy/docker/docker-compose.production.yml up -d
 ```
+
+The production overlay intentionally refuses to start unless `MINIO_PRODUCTION_PUBLIC_BASE_URL` is explicitly set to a browser-reachable URL, normally an HTTPS object-storage domain. This separate variable prevents a copied local `MINIO_PUBLIC_BASE_URL=http://127.0.0.1:9000` from silently passing production validation. The overlay removes MinIO's direct host ports, so `localhost`, `127.0.0.1`, and the Docker-only hostname `minio` are invalid production browser URLs. Route the configured HTTPS endpoint to the private MinIO service without making the bucket anonymous.
+
+For testing from a phone on the same trusted LAN, set both values in `deploy/docker/.env` before recreating `minio` and `backend`:
+
+```dotenv
+MINIO_BIND_ADDRESS=0.0.0.0
+MINIO_PUBLIC_BASE_URL=http://192.168.1.20:9000
+```
+
+Replace `192.168.1.20` with the computer's LAN address and allow TCP 9000 through the local firewall only for the trusted network. Open the user app using the same computer address, for example `http://192.168.1.20:18080`; using `localhost` on a phone points to the phone itself.
 
 The backend runs `alembic upgrade head` before Uvicorn starts; `schema.sql` is not mounted into MySQL. The local demonstration example sets `BOOTSTRAP_ADMIN_ENABLED=true` only to create the configured administrator on its first startup. Set it back to `false` immediately after that account exists. Existing administrators are never reset by bootstrap, and the real compose file supplies no public default administrator/database/MinIO password.
 
@@ -95,7 +106,7 @@ cd deploy/docker
 docker compose -f docker-compose.frontend.yml up --build
 ```
 
-By default the frontend-only compose builds API calls against the absolute browser URL `http://localhost:8080/api/v1`. Override `VITE_API_BASE_URL` at build time for a backend on another origin and include both frontend origins in backend `CORS_ALLOWED_ORIGINS`. In the full-stack compose, `/api/v1` remains relative and is proxied by each frontend nginx container.
+The frontend-only compose defaults to relative `/api/v1` and proxies it at runtime to `BACKEND_UPSTREAM=http://host.docker.internal:8080`. Override `BACKEND_UPSTREAM` with a URL reachable from the nginx container when the backend is elsewhere. An absolute `VITE_API_BASE_URL` remains available for intentionally cross-origin builds, in which case include both frontend origins in backend `CORS_ALLOWED_ORIGINS`. The full-stack compose also uses relative `/api/v1`, with nginx proxying to the `backend` service.
 
 - User app: `http://localhost:18080`
 - Admin web: `http://localhost:18081`

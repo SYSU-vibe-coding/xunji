@@ -46,13 +46,13 @@ const detailLabel = computed(
     @click="$emit('open', item.id, kind)"
   >
     <span class="cover">
-      <img v-if="cover && !isSensitive" :src="cover" :alt="item.itemName" />
+      <img v-if="cover" :src="cover" :alt="item.itemName" />
       <span v-else class="cover-fallback">
         <el-icon :size="36">
           <Lock v-if="isSensitive" />
           <PictureIcon v-else />
         </el-icon>
-        <span v-if="isSensitive">敏感物品已脱敏</span>
+        <span v-if="isSensitive">敏感原图已隐藏</span>
       </span>
       <span class="badges">
         <el-tag size="small" effect="dark" round>{{ categoryLabels[item.category] }}</el-tag>

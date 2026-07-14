@@ -39,6 +39,6 @@
 
 ## GET /api/v1/matches/{id}  · 用户（当事方）
 
-返回匹配得分拆解 + 对方物品完整信息 + `canClaim`（bool，依据 `FoundItemStatus` 与现有认领判断）。
+返回匹配得分拆解、对方物品完整信息、关联认领摘要 `claimId` / `claimStatus`，以及 `canClaim`。`canClaim` 同时依据双方物品状态、现有认领、当前用户状态和信用分判断；信用分低于 30 时仍可查看匹配，但不可发起认领。
 
 非当事方访问 → `40003`。

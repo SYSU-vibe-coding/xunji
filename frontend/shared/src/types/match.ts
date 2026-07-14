@@ -1,4 +1,4 @@
-import type { BizType, ItemCategory, MatchStatus } from '../enums';
+import type { BizType, ClaimReviewStatus, ItemCategory, MatchStatus } from '../enums';
 
 export type MatchBizType = Extract<BizType, 'LOST' | 'FOUND'>;
 export type MatchScoreSource =
@@ -34,6 +34,8 @@ export interface MatchSummary {
 
 export interface MatchDetail extends MatchSummary {
   canClaim: boolean;
+  claimId: string | null;
+  claimStatus: ClaimReviewStatus | null;
   lostItem: Record<string, unknown>;
   foundItem: Record<string, unknown>;
 }

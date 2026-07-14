@@ -36,6 +36,15 @@ class ClaimRequestRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_latest_by_match_id(self, match_id: str) -> ClaimRequest | None:
+        result = await self._session.execute(
+            select(ClaimRequest)
+            .where(ClaimRequest.match_id == match_id)
+            .order_by(ClaimRequest.updated_at.desc(), ClaimRequest.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def has_active_claim(
         self, found_item_id: str, *, exclude_claim_id: str | None = None
     ) -> bool:

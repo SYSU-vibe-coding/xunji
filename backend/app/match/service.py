@@ -38,6 +38,7 @@ from app.match.schemas import (
 from app.match.scoring import rule_based_score
 from app.user.repository import UserRepository
 from app.user.schemas import CurrentUser
+from app.user.service import UserService
 
 # Score thresholds documented in matching-rules.md §3
 MATCH_THRESHOLD = 70.0
@@ -52,6 +53,7 @@ class MatchService:
         self._repo = MatchResultRepository(session)
         self._item_svc = ItemService(session)
         self._claim_repo = ClaimRequestRepository(session)
+        self._user_svc = UserService(session)
         self._ai_client = ai_client
 
     async def get_by_id(self, match_id: str) -> MatchResult | None:
@@ -143,8 +145,13 @@ class MatchService:
 
         lost_detail = await self._item_svc.get_lost_item_detail(match.lost_item_id, current_user)
         found_detail = await self._item_svc.get_found_item_detail(match.found_item_id, current_user)
+        viewer = await self._user_svc.get_user_internal(current_user.id)
+        claim = await self._claim_repo.get_latest_by_match_id(match.id)
         can_claim = (
-            current_user.id == lost_item.user_id
+            viewer is not None
+            and viewer.status == "ACTIVE"
+            and viewer.credit_score >= 30
+            and current_user.id == lost_item.user_id
             and found_item.user_id != current_user.id
             and found_item.status == "PENDING"
             and found_item.review_status == "APPROVED"
@@ -163,6 +170,8 @@ class MatchService:
             lost_item=lost_detail,
             found_item=found_detail,
             can_claim=can_claim,
+            claim_id=claim.id if claim is not None else None,
+            claim_status=claim.review_status if claim is not None else None,
         )
         await self._session.commit()
         return detail

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Aim, Refresh, View } from '@element-plus/icons-vue';
+import { Aim, View } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import EmptyState from '@/components/EmptyState.vue';
@@ -12,8 +12,6 @@ import { getFoundItem } from '@/api/item';
 import {
   getMatch,
   listMatches,
-  recalculateCompletedMessage,
-  recalculateMatch,
 } from '@/api/match';
 import { ApiError } from '@/api/http';
 import {
@@ -41,7 +39,6 @@ const requestedMatchId = computed(() => {
   const value = route.query.matchId;
   return typeof value === 'string' && value ? value : null;
 });
-const hasContext = computed(() => Boolean(bizType.value && bizId.value));
 
 const matches = ref<MatchSummary[]>([]);
 const total = ref(0);
@@ -49,7 +46,6 @@ const loading = ref(false);
 const loadError = ref('');
 const pageNo = ref(1);
 const pageSize = ref(20);
-const recalculating = ref(false);
 const detailVisible = ref(false);
 const activeMatch = ref<MatchDetail | MatchSummary | null>(null);
 
@@ -62,6 +58,11 @@ const proofUploadError = ref<string | null>(null);
 const claimSubmitting = ref(false);
 
 const title = computed(() => (bizType.value === 'FOUND' ? '招领匹配' : bizType.value === 'LOST' ? '失物匹配' : '我的匹配'));
+const activeClaimStatus = computed(() => (
+  activeMatch.value && 'claimStatus' in activeMatch.value
+    ? activeMatch.value.claimStatus
+    : null
+));
 
 async function load() {
   loading.value = true;
@@ -98,30 +99,6 @@ async function openMatch(matchId: string) {
     detailVisible.value = true;
   } catch (err) {
     ElMessage.error(err instanceof ApiError ? err.message : '加载匹配详情失败');
-  }
-}
-
-async function handleRecalculate() {
-  const currentBizType = bizType.value;
-  const currentBizId = bizId.value;
-  if (!currentBizType || !currentBizId) {
-    ElMessage.info('请在具体物品详情页使用重算功能');
-    return;
-  }
-  recalculating.value = true;
-  try {
-    const result = await recalculateMatch({ bizType: currentBizType, bizId: currentBizId });
-    ElMessage.success(recalculateCompletedMessage(result));
-    await load();
-  } catch (err) {
-    if (isConflictApiError(err)) {
-      ElMessage.warning('匹配状态已变化，已刷新最新结果');
-      await load();
-      return;
-    }
-    ElMessage.error(err instanceof ApiError ? err.message : '重算失败');
-  } finally {
-    recalculating.value = false;
   }
 }
 
@@ -224,11 +201,6 @@ onMounted(load);
       <span class="eyebrow">Matches</span>
       <h1>{{ title }}</h1>
       <p>查看系统推荐的相似物品，并从高可信匹配直接发起认领。</p>
-      <div v-if="hasContext" class="header-actions">
-        <el-button :loading="recalculating" :icon="Refresh" @click="handleRecalculate">
-          重新计算
-        </el-button>
-      </div>
     </header>
 
     <el-skeleton v-if="loading && !matches.length" :rows="4" animated />
@@ -304,6 +276,9 @@ onMounted(load);
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="匹配状态">
               <StatusTag variant="match" :value="activeMatch.matchStatus" />
+            </el-descriptions-item>
+            <el-descriptions-item v-if="activeClaimStatus" label="认领进度">
+              <StatusTag variant="claim" :value="activeClaimStatus" />
             </el-descriptions-item>
             <el-descriptions-item label="地点">{{ activeMatch.counterpart.location }}</el-descriptions-item>
             <el-descriptions-item label="时间">{{ shortDateTime(activeMatch.counterpart.time) }}</el-descriptions-item>

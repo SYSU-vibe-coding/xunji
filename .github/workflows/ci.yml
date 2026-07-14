@@ -204,7 +204,7 @@ jobs:
           MINIO_SECRET_KEY: ci-minio-secret-not-for-deployment
 
       - name: Build backend image
-        run: docker build -f backend/Dockerfile -t xunji/backend:ci .
+        run: docker build -f backend/Dockerfile -t xunji/backend:ci backend
 
       - name: Build AI service image
-        run: docker build -f ai-service/Dockerfile -t xunji/ai-service:ci .
+        run: docker build -f ai-service/Dockerfile -t xunji/ai-service:ci ai-service

@@ -394,9 +394,13 @@ async function updateStatus(status: 'FOUND' | 'CLOSED') {
   const isLost = dialogKind.value === 'lost';
   const id = isLost ? lostDetail.value?.id : foundDetail.value?.id;
   if (!id) return;
-  const label = status === 'FOUND' ? '标记已找回' : '关闭';
+  const label = status === 'FOUND' ? '标记已找回' : isLost ? '结束寻物' : '结束招领';
   try {
-    await ElMessageBox.confirm(`确认${label}这条发布吗？`, label, { type: 'warning' });
+    await ElMessageBox.confirm(`确认${label}这条发布吗？`, label, {
+      type: 'warning',
+      confirmButtonText: label,
+      cancelButtonText: '取消',
+    });
   } catch {
     return;
   }
@@ -639,10 +643,10 @@ onMounted(async () => {
           </div>
           <h3 class="title">{{ foundDetail.itemName }}</h3>
           <p class="desc">{{ foundDetail.description || '发布者未填写描述' }}</p>
-          <div v-if="!foundDetail.isSensitive && detailImages.length" class="thumbs">
+          <div v-if="detailImages.length" class="thumbs">
             <img v-for="img in detailImages" :key="img" :src="img" :alt="foundDetail.itemName" />
           </div>
-          <el-alert v-else-if="foundDetail.isSensitive" type="warning" :closable="false" title="敏感物品，图片已脱敏" />
+          <el-alert v-else-if="foundDetail.isSensitive" type="warning" :closable="false" title="敏感物品原图已隐藏" />
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="拾获时间">{{ shortDateTime(foundDetail.foundTime) }}</el-descriptions-item>
             <el-descriptions-item label="拾获地点">{{ foundDetail.foundLocation }}</el-descriptions-item>
@@ -755,7 +759,7 @@ onMounted(async () => {
             :disabled="dialogKind === 'lost' ? lostDetail?.status !== 'SEARCHING' : !canCloseFound"
             @click="updateStatus('CLOSED')"
           >
-            关闭
+            {{ dialogKind === 'lost' ? '结束寻物' : '结束招领' }}
           </el-button>
           <el-button type="primary" @click="startEdit">编辑</el-button>
           <el-button @click="dialogVisible = false">返回</el-button>

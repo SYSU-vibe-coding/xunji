@@ -154,7 +154,7 @@
 
 ## 8. 文件与图片
 
-- 图片：`image/jpeg` / `image/png` / `image/webp`，单文件 ≤ 10MB
+- 图片：`image/jpeg` / `image/png` / `image/webp`，单文件 ≤ 20MB
 - 服务端按实际图片内容解码，限制总像素，拒绝 decompression bomb；不信任客户端 MIME、文件名或扩展名
 - 上传后按真实格式重新编码为 JPEG/PNG/WebP 并剥离 EXIF/文本元数据
 - 每条失物/招领 ≤ 5 张

@@ -2,9 +2,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from app.claim.models import ClaimRequest
 from app.db.ulid import generate_ulid
 from app.item.models import FoundItem, ItemImage, LostItem
 from app.match.models import MatchResult
+from app.user.models import User
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,8 +179,38 @@ async def test_get_match_detail_returns_parties_and_can_claim(
     assert data["lostItem"]["id"] == lost.id
     assert data["foundItem"]["id"] == found.id
     assert data["canClaim"] is True
+    assert data["claimId"] is None
+    assert data["claimStatus"] is None
     assert data["matchStatus"] == "READ"
     assert match.match_status == "READ"
+
+
+async def test_match_detail_exposes_claim_progress_and_enforces_credit_threshold(
+    client: AsyncClient,
+    session: AsyncSession,
+    auth_headers: dict[str, str],
+) -> None:
+    _, found, match = await _seed_owned_match(session)
+    user = await session.get(User, "01TESTUSER000000000000001")
+    assert user is not None
+    user.credit_score = 29
+    claim = ClaimRequest(
+        id=generate_ulid(),
+        match_id=match.id,
+        found_item_id=found.id,
+        claimant_id=user.id,
+        verify_level="LEVEL_2",
+        review_status="APPROVED",
+    )
+    session.add(claim)
+    await session.commit()
+
+    resp = await client.get(f"/api/v1/matches/{match.id}", headers=auth_headers)
+
+    data = resp.json()["data"]
+    assert data["canClaim"] is False
+    assert data["claimId"] == claim.id
+    assert data["claimStatus"] == "APPROVED"
 
 
 async def test_recalculate_invokes_trigger_match(

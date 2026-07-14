@@ -101,6 +101,8 @@ class MatchDetailResponse(MatchListItem):
     lost_item: dict[str, Any]
     found_item: dict[str, Any]
     can_claim: bool
+    claim_id: str | None = None
+    claim_status: str | None = None
 
 
 class MatchRecalculateResponse(BaseModel):

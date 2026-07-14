@@ -18,7 +18,7 @@ from app.common.utils import now_beijing
 from app.core.config import Settings, settings
 
 ASSET_PREFIX = "asset://"
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 UPLOAD_BIZ_TYPES = {"LOST", "FOUND", "CLAIM_PROOF", "CERT", "USER"}
 _KEY_PATTERN = re.compile(
     r"^(?P<biz>[A-Z_]+)/(?P<user>[A-Za-z0-9_-]+)/(?P<month>\d{6})/"
@@ -252,7 +252,7 @@ def sanitize_image(raw: bytes, *, max_pixels: int) -> SanitizedImage:
     if not raw:
         raise BizError(ErrorCode.UPLOAD_FAILED, "图片内容为空")
     if len(raw) > MAX_UPLOAD_BYTES:
-        raise BizError(ErrorCode.UPLOAD_FAILED, "文件大小不能超过 10MB")
+        raise BizError(ErrorCode.UPLOAD_FAILED, "文件大小不能超过 20MB")
 
     try:
         with warnings.catch_warnings():

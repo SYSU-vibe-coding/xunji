@@ -43,8 +43,8 @@ export const foundStatusLabels: Record<FoundItemStatus, string> = {
 export const matchStatusLabels: Record<MatchStatus, string> = {
   NEW: '新匹配',
   READ: '已查看',
-  CLAIMED: '已认领',
-  EXPIRED: '已过期',
+  CLAIMED: '已有认领',
+  EXPIRED: '匹配已失效',
 };
 
 export const reviewStatusLabels: Record<ReviewStatus, string> = {

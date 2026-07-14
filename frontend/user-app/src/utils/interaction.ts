@@ -26,6 +26,10 @@ export function getMatchCounterpartKind(match: MatchSummary): 'lost' | 'found' |
   return null;
 }
 
+export function canInitiateClaim(creditScore: number | null | undefined): boolean {
+  return typeof creditScore === 'number' && creditScore >= 30;
+}
+
 export function getNotificationTarget(
   relatedType: string | null,
   relatedId: string | null,

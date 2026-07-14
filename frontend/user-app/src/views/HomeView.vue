@@ -146,7 +146,7 @@ onMounted(load);
           <span class="quick-icon"><el-icon :size="21"><Search /></el-icon></span>
           <span class="quick-copy">
             <strong>检索物品</strong>
-            <small>按关键词、地点和类别查找</small>
+            <small>浏览全站失物与招领线索</small>
           </span>
           <el-icon class="arrow"><Right /></el-icon>
         </RouterLink>

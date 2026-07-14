@@ -15,6 +15,7 @@ import {
   reportItem,
 } from '@/api/item';
 import { createClaim } from '@/api/claim';
+import { getMatch } from '@/api/match';
 import { ApiError } from '@/api/http';
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -23,10 +24,11 @@ import {
   custodyTypeLabels,
   type FoundItemDetail,
   type LostItemDetail,
+  type MatchDetail,
   isConflictApiError,
 } from '@xunji/shared';
 import { shortDateTime } from '@/utils/format';
-import { buildClaimAnswers } from '@/utils/interaction';
+import { buildClaimAnswers, canInitiateClaim } from '@/utils/interaction';
 
 const route = useRoute();
 const router = useRouter();
@@ -41,6 +43,8 @@ const loading = ref(true);
 const loadError = ref('');
 const deleting = ref(false);
 const statusChanging = ref(false);
+const relatedMatch = ref<MatchDetail | null>(null);
+const coverLoadFailed = ref(false);
 
 const claimDialog = ref(false);
 const claimAnswers = reactive<Record<string, string>>({});
@@ -59,19 +63,23 @@ const isOwner = computed(() => detail.value?.userId === auth.profile?.id);
 const itemName = computed(() => detail.value?.itemName ?? '物品详情');
 const images = computed(() => detail.value?.imageUrls ?? []);
 const cover = computed(() => images.value[0] ?? null);
+const creditFrozen = computed(() => !canInitiateClaim(auth.profile?.creditScore));
 const canClaim = computed(() => Boolean(
   foundDetail.value &&
   !isOwner.value &&
   foundDetail.value.status === 'PENDING' &&
   foundDetail.value.reviewStatus === 'APPROVED' &&
-  !foundDetail.value.hasActiveClaim,
+  !foundDetail.value.hasActiveClaim &&
+  !creditFrozen.value,
 ));
 
 async function load() {
   loading.value = true;
   foundDetail.value = null;
   lostDetail.value = null;
+  relatedMatch.value = null;
   loadError.value = '';
+  coverLoadFailed.value = false;
   try {
     if (isFound.value) {
       foundDetail.value = await getFoundItem(id.value);
@@ -80,6 +88,14 @@ async function load() {
       });
     } else {
       lostDetail.value = await getLostItem(id.value);
+    }
+    const matchId = typeof route.query.matchId === 'string' ? route.query.matchId : '';
+    if (matchId) {
+      try {
+        relatedMatch.value = await getMatch(matchId);
+      } catch {
+        relatedMatch.value = null;
+      }
     }
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : '加载失败，请稍后重试';
@@ -94,7 +110,11 @@ onMounted(load);
 async function handleDelete() {
   if (deleting.value || !lostDetail.value) return;
   try {
-    await ElMessageBox.confirm('确认删除这条失物信息吗？', '删除确认', { type: 'warning' });
+    await ElMessageBox.confirm('确认删除这条失物信息吗？', '删除确认', {
+      type: 'warning',
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+    });
   } catch {
     return;
   }
@@ -117,9 +137,13 @@ async function handleDelete() {
 
 async function changeLostStatus(status: 'FOUND' | 'CLOSED') {
   if (statusChanging.value || !lostDetail.value) return;
-  const label = status === 'FOUND' ? '标记为已找回' : '关闭';
+  const label = status === 'FOUND' ? '标记为已找回' : '结束寻物';
   try {
-    await ElMessageBox.confirm(`确认${label}这条失物信息吗？`, label, { type: 'warning' });
+    await ElMessageBox.confirm(`确认${label}这条失物信息吗？`, label, {
+      type: 'warning',
+      confirmButtonText: label,
+      cancelButtonText: '取消',
+    });
   } catch {
     return;
   }
@@ -144,6 +168,10 @@ function openClaim() {
   if (!foundDetail.value) return;
   if (foundDetail.value.userId === auth.profile?.id) {
     ElMessage.warning('不能认领自己发布的招领');
+    return;
+  }
+  if (creditFrozen.value) {
+    ElMessage.warning('信用分低于 30，认领权限已冻结');
     return;
   }
   if (foundDetail.value.hasActiveClaim) {
@@ -249,6 +277,10 @@ function goMatches() {
   });
 }
 
+function goClaim() {
+  if (relatedMatch.value?.claimId) void router.push(`/claims/${relatedMatch.value.claimId}`);
+}
+
 function goManage() {
   if (!detail.value) return;
   void router.push({
@@ -271,16 +303,21 @@ function goManage() {
       <el-card shadow="never" class="hero-card" :body-style="{ padding: 0 }">
         <div class="hero-grid">
           <div class="media">
-            <div v-if="isFound && foundDetail?.isSensitive" class="sensitive">
-              <el-icon :size="40"><Lock /></el-icon>
-              <strong>敏感物品已脱敏</strong>
-              <small>仅完成实名认证的失主可见原图</small>
+            <img v-if="cover && !coverLoadFailed" :src="cover" :alt="itemName" @error="coverLoadFailed = true" />
+            <div v-else-if="coverLoadFailed" class="placeholder image-error">
+              <el-icon :size="40"><PictureIcon /></el-icon>
+              <span>图片加载失败，链接可能已过期</span>
+              <el-button link type="primary" @click="load">重新加载图片</el-button>
             </div>
-            <img v-else-if="cover" :src="cover" :alt="itemName" />
+            <div v-else-if="isFound && foundDetail?.isSensitive" class="sensitive">
+              <el-icon :size="40"><Lock /></el-icon>
+              <strong>敏感物品原图已隐藏</strong>
+              <small>仅发布者和管理员可查看原图</small>
+            </div>
             <div v-else class="placeholder">
               <el-icon :size="40"><PictureIcon /></el-icon>
             </div>
-            <div v-if="images.length > 1 && !(isFound && foundDetail?.isSensitive)" class="thumbs">
+            <div v-if="images.length > 1" class="thumbs">
               <img v-for="img in images" :key="img" :src="img" :alt="itemName" />
             </div>
           </div>
@@ -289,6 +326,11 @@ function goManage() {
               <el-tag round effect="dark">{{ categoryLabels[detail.category] }}</el-tag>
               <StatusTag :variant="bizType" :value="detail.status" />
               <StatusTag variant="review" :value="detail.reviewStatus" />
+              <StatusTag
+                v-if="relatedMatch?.claimStatus"
+                variant="claim"
+                :value="relatedMatch.claimStatus"
+              />
             </div>
             <h1>{{ detail.itemName }}</h1>
             <p class="desc">{{ detail.description || '发布者未填写描述' }}</p>
@@ -319,7 +361,10 @@ function goManage() {
 
             <div class="actions">
               <el-button v-if="isOwner" @click="goMatches">查看匹配</el-button>
-              <el-button v-else plain @click="openReport">举报</el-button>
+              <el-button v-if="relatedMatch?.claimId" type="primary" plain @click="goClaim">
+                查看认领进度
+              </el-button>
+              <el-button v-if="!isOwner" plain @click="openReport">举报</el-button>
               <template v-if="isFound">
                 <el-button v-if="isOwner" type="primary" @click="goManage">管理 / 编辑发布</el-button>
                 <el-button
@@ -349,7 +394,7 @@ function goManage() {
                   :loading="statusChanging"
                   @click="changeLostStatus('CLOSED')"
                 >
-                  关闭
+                  结束寻物
                 </el-button>
                 <el-button type="danger" plain :loading="deleting" @click="handleDelete">删除</el-button>
               </template>

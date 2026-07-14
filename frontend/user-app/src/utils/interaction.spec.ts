@@ -5,6 +5,7 @@ import {
   buildClaimAnswers,
   buildMyItemsQuery,
   buildSearchQuery,
+  canInitiateClaim,
   getMatchCounterpartKind,
   getNotificationTarget,
   parseVerifyQuestionDrafts,
@@ -36,6 +37,13 @@ describe('user interaction utils', () => {
     expect(getMatchCounterpartKind(match)).toBe('lost');
     match.counterpart.id = 'found-1';
     expect(getMatchCounterpartKind(match)).toBe('found');
+  });
+
+  it('enforces the documented claim credit threshold', () => {
+    expect(canInitiateClaim(undefined)).toBe(false);
+    expect(canInitiateClaim(29)).toBe(false);
+    expect(canInitiateClaim(30)).toBe(true);
+    expect(canInitiateClaim(60)).toBe(true);
   });
 
   it('maps runtime match and certification notifications to usable routes', () => {

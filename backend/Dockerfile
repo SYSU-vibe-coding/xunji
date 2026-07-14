@@ -9,12 +9,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app" \
     PATH="/app/.venv/bin:$PATH"
 
-COPY backend/pyproject.toml backend/uv.lock ./
+COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY backend/app ./app
-COPY backend/alembic ./alembic
-COPY backend/alembic.ini ./alembic.ini
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 
 EXPOSE 8080
 

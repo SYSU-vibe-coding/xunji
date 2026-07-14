@@ -1,20 +1,24 @@
 services:
   xunji-user-web:
     build:
-      context: ../..
-      dockerfile: frontend/user-app/Dockerfile
+      context: ../../frontend
+      dockerfile: user-app/Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
     image: xunji/user-web:local
+    environment:
+      BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-http://host.docker.internal:8080}
     ports:
       - "${USER_WEB_PORT:-18080}:80"
 
   xunji-admin-web:
     build:
-      context: ../..
-      dockerfile: frontend/admin-web/Dockerfile
+      context: ../../frontend
+      dockerfile: admin-web/Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
     image: xunji/admin-web:local
+    environment:
+      BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-http://host.docker.internal:8080}
     ports:
       - "${ADMIN_WEB_PORT:-18081}:80"

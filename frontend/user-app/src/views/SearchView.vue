@@ -460,8 +460,9 @@ onMounted(() => {
     min-width: 0;
   }
 
-  .date-filter {
+  :deep(.date-filter) {
     width: 100%;
+    max-width: 100%;
   }
 
   .apply-button {
@@ -504,19 +505,21 @@ onMounted(() => {
   justify-content: center;
 }
 
-@media (max-width: 1180px) and (min-width: 721px) {
+@media (max-width: 1440px) and (min-width: 721px) {
   .advanced-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-
-    .date-filter {
-      grid-column: 1 / -1;
-    }
 
     .apply-button {
       grid-column: 1 / -1;
       justify-self: end;
       min-width: 136px;
     }
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 721px) {
+  .advanced-filters :deep(.date-filter) {
+    grid-column: 1 / -1;
   }
 }
 

@@ -138,34 +138,50 @@ AI_SERVICE_TOKEN=<openssl rand -hex 16 生成>
 - **手机局域网演示**：若需用手机访问同一台电脑，把 `MINIO_BIND_ADDRESS=0.0.0.0`，并把 `MINIO_PUBLIC_BASE_URL` 改为电脑局域网 IP，例如 `http://192.168.1.20:9000`；用户端用 `http://192.168.1.20:18080` 打开（手机用 `localhost` 会指向手机自身）。
 - **端口冲突**：通过 `USER_WEB_PORT`、`ADMIN_WEB_PORT`、`BACKEND_PORT`、`AI_SERVICE_PORT`、`MYSQL_PORT`、`MINIO_API_PORT` 等覆盖默认端口。
 
-#### 4. 启动
+#### 4. 启动（两种镜像获取方式任选其一）
 
-**方式一：拉取预构建镜像（推荐，无需编译，约 1 分钟启动）**
+启动前需要决定用哪种方式获取四个应用镜像（`backend` / `ai-service` / `user-web` / `admin-web`）。两者最终运行效果一致，区别只在是否需要本地编译。
 
-我们已将四个应用镜像发布到 GitHub Container Registry。在 `.env` 中设置 `XUNJI_TAG` 为已发布的版本号即可直接拉取，跳过本地编译：
+**方案 ① 拉取预构建镜像（推荐，免编译，约 1 分钟启动）**
+
+我们通过 CI 自动将每次发版的四个应用镜像发布到 GitHub Container Registry（GHCR）。只需在 `.env` 里把 `XUNJI_TAG` 设为已发布版本号，compose 即直接拉取远端镜像，跳过本地编译：
 
 ```bash
-# 在 deploy/docker/.env 中添加一行（版本号见 GitHub Releases 或 https://github.com/SYSU-vibe-coding/xunji/pkgs）
+# 编辑 deploy/docker/.env，添加一行（可用版本见 https://github.com/SYSU-vibe-coding/xunji/pkgs）
 XUNJI_TAG=v1.1.1
 
-# 拉取镜像并启动（不需要 --build）
+# 拉取镜像
 docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml pull
+
+# 启动（无需 --build）
 docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml up -d
 ```
 
-> 未设置 `XUNJI_TAG` 时自动回退到本地构建（见方式二）。
+适用场景：助教/老师验收、答辩演示、任何想快速跑起来查看功能的环境。无需安装 Node/Python/uv/pnpm 工具链，只要 Docker。
 
-**方式二：本地构建启动（需要编译，首次约 10-15 分钟）**
+**方案 ② 本地构建镜像（需编译，首次约 10–15 分钟）**
 
-在仓库根目录执行：
+不设置 `XUNJI_TAG`（或留空）时，compose 回退到 `local` 标签并触发本地构建。适合二次开发、改了源码需要即时生效的场景：
 
 ```bash
-docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml up --build
+# 确保 .env 中 XUNJI_TAG 留空或未设置
+# 构建并启动（首次会编译四个应用镜像）
+docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml up --build -d
 ```
 
-首次构建需要拉取镜像并编译三个应用镜像，耐心等待。后端容器启动时会自动执行 `alembic upgrade head` 应用数据库迁移，无需手动建表。
+如需只构建不启动，可单独执行：
 
-#### 5. 访问入口
+```bash
+docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml build
+```
+
+> 两种方式的后续操作（查看日志、停止、重置数据）完全相同，见下文。
+
+#### 5. 启动后自动执行的初始化
+
+无论哪种方式，`backend` 容器启动时都会自动执行 `alembic upgrade head` 应用数据库迁移，无需手动建表；`BOOTSTRAP_ADMIN_ENABLED=true` 时会在首次启动时创建管理员账号。
+
+#### 6. 访问入口
 
 | 服务 | 地址 |
 | --- | --- |
@@ -177,13 +193,13 @@ docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml
 | MinIO 控制台 | http://localhost:9001 |
 | MySQL | 127.0.0.1:3306 |
 
-#### 6. 默认账号与演示登录
+#### 7. 默认账号与演示登录
 
 - **管理员**：账号 `admin`，手机号 `19900000000`，密码为你填写的 `ADMIN_PASSWORD`（首次启动时由 `BOOTSTRAP_ADMIN_ENABLED=true` 自动创建）。
 - **演示用户**：用 `13800138000` 或 `13900139000` 注册/登录，会命中演示短信白名单，验证码会在后端日志中输出（不发送真实短信）。
 - **安全提醒**：演示完成后请将 `.env` 中的 `BOOTSTRAP_ADMIN_ENABLED` 改回 `false`，避免后续启动重复创建管理员。
 
-#### 7. 重置本地数据
+#### 8. 重置本地数据
 
 ```bash
 docker compose -f deploy/docker/docker-compose.yml down -v
@@ -191,7 +207,7 @@ docker compose -f deploy/docker/docker-compose.yml down -v
 
 `-v` 会删除 MySQL 与 MinIO 的数据卷，下次启动等同于全新部署。
 
-#### 8. 仅构建前端（后端由外部提供时）
+#### 9. 仅构建前端（后端由外部提供时）
 
 ```bash
 cd deploy/docker

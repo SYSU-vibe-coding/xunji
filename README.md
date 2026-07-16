@@ -140,6 +140,23 @@ AI_SERVICE_TOKEN=<openssl rand -hex 16 生成>
 
 #### 4. 启动
 
+**方式一：拉取预构建镜像（推荐，无需编译，约 1 分钟启动）**
+
+我们已将四个应用镜像发布到 GitHub Container Registry。在 `.env` 中设置 `XUNJI_TAG` 为已发布的版本号即可直接拉取，跳过本地编译：
+
+```bash
+# 在 deploy/docker/.env 中添加一行（版本号见 GitHub Releases 或 https://github.com/SYSU-vibe-coding/xunji/pkgs）
+XUNJI_TAG=v1.1.1
+
+# 拉取镜像并启动（不需要 --build）
+docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml pull
+docker compose --env-file deploy/docker/.env -f deploy/docker/docker-compose.yml up -d
+```
+
+> 未设置 `XUNJI_TAG` 时自动回退到本地构建（见方式二）。
+
+**方式二：本地构建启动（需要编译，首次约 10-15 分钟）**
+
 在仓库根目录执行：
 
 ```bash

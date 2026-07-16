@@ -49,7 +49,7 @@ services:
     build:
       context: ../../ai-service
       dockerfile: Dockerfile
-    image: xunji/ai-service:local
+    image: ghcr.io/sysu-vibe-coding/xunji/ai-service:${XUNJI_TAG:-local}
     container_name: xunji-ai-service
     restart: unless-stopped
     environment:
@@ -79,7 +79,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    image: xunji/backend:local
+    image: ghcr.io/sysu-vibe-coding/xunji/backend:${XUNJI_TAG:-local}
     container_name: xunji-backend
     restart: unless-stopped
     command:
@@ -146,7 +146,7 @@ services:
       dockerfile: user-app/Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
-    image: xunji/user-web:local
+    image: ghcr.io/sysu-vibe-coding/xunji/user-web:${XUNJI_TAG:-local}
     container_name: xunji-user-web
     restart: unless-stopped
     depends_on:
@@ -161,7 +161,7 @@ services:
       dockerfile: admin-web/Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
-    image: xunji/admin-web:local
+    image: ghcr.io/sysu-vibe-coding/xunji/admin-web:${XUNJI_TAG:-local}
     container_name: xunji-admin-web
     restart: unless-stopped
     depends_on:
